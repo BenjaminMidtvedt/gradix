@@ -120,7 +120,11 @@ def _spec_from_json(data: Mapping[str, Any]) -> object:
     """Rebuild an output spec: a reserved name, or a registered label from its static fields."""
     if not data.get("label"):
         if data["type"] == "field":
-            return FieldOutput(normalize=data["normalize"], layout=data["layout"])
+            return FieldOutput(
+                normalize=data["normalize"],
+                layout=data["layout"],
+                sampling=data.get("sampling", "centre"),
+            )
         return data["type"]
     from gradix._core.registry import labels
 

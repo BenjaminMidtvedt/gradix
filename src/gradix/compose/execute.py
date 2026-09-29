@@ -82,9 +82,11 @@ def check_supported(chain: Chain) -> None:
         On coherent slots, a missing imaging element or camera, or an imaging element that does
         not consume emitters.
     """
-    if chain.illumination_optics or chain.detection_optics or chain.references:
-        msg = "optical stages and references are not available yet (later M3a phases)"
+    if chain.illumination_optics or chain.detection_optics:
+        msg = "optical stages are not available yet (later M3a phases)"
         raise PlanError(msg, fix="render the Chain without them for now")
+    if chain.references and not coherent(chain):
+        raise PlanError("references need a coherent Chain", fix="use gx.imaging.Coherent")
     if coherent(chain):
         _check_coherent(chain)
         return
@@ -176,6 +178,10 @@ def _check_coherent(chain: Chain) -> None:
         if not isinstance(element, Element) or not _makes(element, ObjectSpectra):
             msg = f"scatterers[{name!r}] must be an interaction element such as gx.interact.Mie"
             raise PlanError(msg, fix=f"scatterers={{{name!r}: gx.interact.Mie(spheres)}}")
+    for name, element in chain.references.items():
+        if not isinstance(element, Element) or not _makes(element, PlaneWaves):
+            msg = f"references[{name!r}] must be a reference element such as gx.light.ReferenceBeam"
+            raise PlanError(msg, fix=f"references={{{name!r}: gx.light.ReferenceBeam(...)}}")
     if not isinstance(chain.camera, Camera):
         raise PlanError("the Chain has no camera", fix="give the imaging element a camera")
     if chain.environment is None:
@@ -305,7 +311,8 @@ def _coherent_statics(chain: Chain, imaging: Element) -> dict[str, Static]:
     for name, element in sorted(chain.scatterers.items()):
         statics[f"scatterers.{name}"] = element.eager_static(waves, chain.environment)
     contributions = _contributions(chain, waves, statics)
-    statics["imaging"] = imaging.eager_static(contributions, waves, chain.environment)
+    references = _references(chain, waves, statics)
+    statics["imaging"] = imaging.eager_static(contributions, waves, chain.environment, references)
     return statics
 
 
@@ -317,6 +324,20 @@ def _waves(chain: Chain, statics: Mapping[str, Static]) -> PlaneWaves:
     if not isinstance(waves, PlaneWaves):
         raise StructureError(f"{type(light).__name__} returned {type(waves).__name__}")
     return waves
+
+
+def _references(
+    chain: Chain, waves: PlaneWaves, statics: Mapping[str, Static]
+) -> tuple[PlaneWaves, ...]:
+    """Evaluate the Chain's references at the light's wavelengths (in their declared order)."""
+    out: list[PlaneWaves] = []
+    for name, element in chain.references.items():
+        reference = element.forward(waves, static=statics.get(f"references.{name}", Static()))
+        if not isinstance(reference, PlaneWaves):
+            kind = type(reference).__name__
+            raise StructureError(f"references[{name!r}] returned {kind}, not PlaneWaves")
+        out.append(reference)
+    return tuple(out)
 
 
 def _contributions(
@@ -371,7 +392,10 @@ def irradiance(chain: Chain, statics: Mapping[str, Static]) -> Irradiance:
     if coherent(chain):
         waves = _waves(chain, statics)
         contributions = _contributions(chain, waves, statics)
-        out = imaging.forward(contributions, waves, chain.environment, static=statics["imaging"])
+        references = _references(chain, waves, statics)
+        out = imaging.forward(
+            contributions, waves, chain.environment, references, static=statics["imaging"]
+        )
         if isinstance(out, Irradiance):  # the frames the acquisition declares (a focus stack)
             out = out.replace(acq=chain.acq_index())
     else:
@@ -505,26 +529,29 @@ def fields(
         raise StructureError(msg, fix="a partially coherent image has no single field")
     s = int(getattr(static, "oversample", 1))
 
-    def pool(field: Tensor) -> Tensor:  # complex average over each camera pixel
+    def pool(field: Tensor, sampling: str) -> Tensor:  # one value per camera pixel
         f = field[:, :, 0, 0]
+        if sampling == "centre":  # the first sample of each pixel lies at its centre
+            return f[..., ::s, ::s]
         b, a, hs, ws = f.shape
         return f.reshape(b, a, hs // s, s, ws // s, s).mean((3, 5))
 
-    field = pool(total)
-    background: Tensor | None = None
+    backgrounds: dict[str, Tensor] = {}
     out: dict[str, Tensor] = {}
     for name, spec in specs.items():
-        value = field
+        value = pool(total, spec.sampling)
         if spec.normalize == "background":
+            background = backgrounds.get(spec.sampling)
             if background is None:
-                background = pool(image_field((), waves, chain.environment, static=static))
+                empty = image_field((), waves, chain.environment, static=static)
+                background = backgrounds[spec.sampling] = pool(empty, spec.sampling)
             if bool((background.abs() == 0).any()):
                 msg = "no background reaches the camera (epi or darkfield illumination)"
                 raise StructureError(msg, fix="use gx.out.Field(normalize='incident')")
-            value = field / background
+            value = value / background
         elif spec.normalize == "incident":
-            amplitude = waves.amplitude[:, :, 0, 0, 0, 0].to(field.dtype)  # [B|1, A|1]
-            value = field / amplitude[:, :, None, None]
+            amplitude = waves.amplitude[:, :, 0, 0, 0, 0].to(value.dtype)  # [B|1, A|1]
+            value = value / amplitude[:, :, None, None]
         if spec.layout == "re_im":
             value = torch.view_as_real(value)
         elif spec.layout == "phase":

@@ -338,6 +338,72 @@ class LayeredMedium(Medium):
         n = self._material("immersion").index(_wavelengths(wavelength), dtype=dtype, device=device)
         return n.reshape(-1) if n.ndim <= 1 else n
 
+    def coverslip_index(
+        self,
+        dtype: torch.dtype = torch.float32,
+        device: torch.device | str | None = None,
+        wavelength: Tensor | float | None = None,
+    ) -> Tensor:
+        """Return the coverslip's index, ``[B|1]`` (or broadcastable against ``wavelength``).
+
+        Parameters
+        ----------
+        dtype : torch.dtype, default torch.float32
+            Dtype of the result.
+        device : torch.device or str, optional
+            Device of the result.
+        wavelength : Tensor or float, optional
+            Vacuum wavelengths, µm: a number, ``[L]`` or ``[B|1, …]``; the d line by default.
+
+        Returns
+        -------
+        Tensor
+            The index of the coverslip, the medium between the sample and the immersion.
+        """
+        n = self._material("coverslip").index(_wavelengths(wavelength), dtype=dtype, device=device)
+        return n.reshape(-1) if n.ndim <= 1 else n
+
+    def mismatch_phase(self, u2: Tensor, wavelength: Tensor) -> Tensor | None:
+        """Return the Gibson–Lanni phase of a coverslip that differs from the design, rad.
+
+        The immersion layer shrinks by the coverslip's excess, keeping the working distance, so
+        a direction u gains ``Re(k_z,g·t − k_z,d·t_d − k_z,i·(t − t_d))``. Only the phase
+        applies: evanescent cells carry no power through the stack.
+
+        Parameters
+        ----------
+        u2 : Tensor
+            ``|u|²`` of the directions, NA units squared.
+        wavelength : Tensor
+            Vacuum wavelengths, µm, broadcastable against ``u2``; per-image values (the
+            thickness, per-image indices) broadcast from the left.
+
+        Returns
+        -------
+        Tensor or None
+            The phase, the broadcast shape; None when the coverslip is the design one.
+        """
+        if self.design_coverslip is None and self.design_thickness is None:
+            return None
+        real, device = u2.dtype, u2.device
+        rank = max(u2.ndim, wavelength.ndim)
+
+        def expand(t: Tensor) -> Tensor:
+            return t.reshape(*t.shape, *([1] * (rank - t.ndim))) if t.ndim < rank else t
+
+        def material(name: str) -> Tensor:
+            n = self._material(name).index(_wavelengths(wavelength), dtype=real, device=device)
+            return expand(n.real if n.is_complex() else n)
+
+        n_g, n_i = material("coverslip"), material("immersion")
+        n_d = n_g if self.design_coverslip is None else material("design_coverslip")
+        t = expand(self._get("thickness", real, device))
+        t_d = t
+        if self.design_thickness is not None:
+            t_d = expand(self._get("design_thickness", real, device))
+        kzg, kzd, kzi = (_kz(n, u2, wavelength) for n in (n_g, n_d, n_i))
+        return (kzg * t).real - (kzd * t_d).real - (kzi * (t - t_d)).real
+
     def pupil_amplitude(self, u2: Tensor, wavelength: Tensor, z: Tensor) -> tuple[Tensor, Tensor]:
         """Return the scalar pupil amplitude of isotropic emitters at heights ``z``.
 

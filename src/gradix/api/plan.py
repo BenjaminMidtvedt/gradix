@@ -190,6 +190,7 @@ class Plan:
         return Chain(
             light=microscope.light,
             scatterers=scatterers,
+            references=dict(microscope.references),
             imaging=build("coherent.pupil", parts, self.fidelity),
             background=microscope.background,
             acquisition=microscope.acquisition,

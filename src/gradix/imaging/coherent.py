@@ -6,10 +6,18 @@ modifiers evaluated at its direction, and its phase at the focal plane. Sparse p
 (:class:`~gradix.ObjectSpectra`) are evaluated on the pupil samples: for Mie spectra, S₁ and S₂
 at the scattering angle between every incident wave and every pupil direction, reduced to the
 co-polarised S∥ = S₂cos²φ + S₁sin²φ (P = 1, §4.1), converted to angular spectra and transformed
-to the camera samples by a matrix Fourier transform. Detection is explicit interference, term
-by term: |E_b|² + 2Re(E_b*·E_s) + |E_s|² per incoherent mode and wavelength bin, integrated over
-pixels by the pixel MTF (§4.3). Homogeneous, index-matched media; magnification maps object
-space onto the camera.
+to the camera samples by a matrix Fourier transform. Image-side references (off-axis
+holography, §4.5) join after the pupil as tilted plane waves. Detection is explicit
+interference, term by term: |E_b|² + 2Re(E_b*·E_s) + |E_s|² and the reference's terms, per
+incoherent mode and wavelength bin, integrated over pixels by the pixel MTF (§4.3).
+
+In a :class:`~gradix.env.LayeredMedium` the layered collection rule applies (§4.1): scattered
+spectra propagate in the sample to the coverslip only (supercritical components decay), cross
+the stack with t_s (S₁) and t_p (S₂), and are apodised by the flux in the immersion,
+C = t·√(Re k_z,i/k_s). Transmitted illumination (travel +1) is defined in the sample and
+crosses the stack the same way. Epi illumination (travel −1) is defined in the coverslip: its
+reflection at the sample interface is the analytic reference of iSCAT, and its transmission
+into the sample illuminates the scatterers. Magnification maps object space onto the camera.
 """
 
 from __future__ import annotations
@@ -36,12 +44,15 @@ from gradix._core.contract import (
 from gradix._core.envelope import Envelope
 from gradix._core.errors import StructureError
 from gradix._core.grid import Grid2D
-from gradix._core.rules import detection_spacing
+from gradix._core.rules import Decision, detection_spacing
 from gradix.conventions import safe_sqrt
 from gradix.detect.camera import Camera
 from gradix.imaging._shared import fused_modifiers, ratio_per_image
-from gradix.objects.environment import Medium
+from gradix.light.reference import ReferenceBeam
+from gradix.objects.environment import LayeredMedium, Medium
+from gradix.objects.objectset import ObjectSet
 from gradix.ops import pupil as ops
+from gradix.optics import fresnel
 from gradix.optics.objective import Objective
 from gradix.optics.pupil import PupilContext, PupilModifier
 from gradix.schema.base import Node
@@ -88,12 +99,23 @@ class _Optics:
     cdtype: torch.dtype
     device: torch.device
     na: Tensor  # [B|1]
-    n: Tensor  # [B|1], the real index of the homogeneous medium
+    magnification: Tensor  # [B|1]
+    n: Tensor  # [B|1], the real index of the sample (or homogeneous) medium
+    n_g: Tensor  # [B|1], the coverslip (n in a homogeneous medium)
+    n_i: Tensor  # [B|1], the immersion (n in a homogeneous medium)
+    layered: bool
     focus: Tensor  # [B|1, A|1]
     pitch: Tensor  # [B|1], object-space camera pitch
     lam: Tensor  # [B|1, L]
     xs: Tensor  # [B|1, Ws], sample positions in object space
     ys: Tensor  # [B|1, Hs]
+
+
+def _flux(kz: Tensor) -> Tensor:
+    """Return √(Re k_z) with finite forward-mode tangents where the wave is evanescent."""
+    re = kz.real
+    positive = re > 0
+    return torch.where(positive, torch.sqrt(torch.where(positive, re, 1.0)), torch.zeros_like(re))
 
 
 @register.element("coherent.pupil")
@@ -109,15 +131,16 @@ class Coherent(Element[Irradiance]):
         The camera.
     oversample : int or "auto", default "auto"
         Samples per camera pixel; ``"auto"`` meets λ_min/(4·NA).
-    pupil_samples : int, default 64
-        Pupil cells per axis for the scattered spectra.
+    pupil_samples : int or "auto", default "auto"
+        Pupil cells per axis for the scattered spectra; ``"auto"`` is 64, or 128 for
+        supercritical collection (a layered medium with NA above the sample's index).
 
     Examples
     --------
     >>> import gradix as gx
     >>> camera = gx.Camera(pixel_size=6.5, shape=(32, 32))
     >>> Coherent(gx.Objective(NA=0.8, magnification=50), camera).pupil_samples
-    64
+    'auto'
     """
 
     slot: ClassVar[Slot] = Slot.OBJECTIVE
@@ -134,11 +157,14 @@ class Coherent(Element[Irradiance]):
         },
     )
 
+    schema_version: ClassVar[int] = 2
+    """2: layered media and ``pupil_samples="auto"`` (M3a)."""
+
     objective: Objective = child(doc="the objective")
     camera: Camera = child(doc="the camera")
     _: dataclasses.KW_ONLY
     oversample: int | str = knob(default="auto", doc="samples per camera pixel")
-    pupil_samples: int = knob(default=64, doc="pupil cells per axis")
+    pupil_samples: int | str = knob(default="auto", doc="pupil cells per axis")
 
     # ---- static -----------------------------------------------------------------------------
 
@@ -164,13 +190,26 @@ class Coherent(Element[Irradiance]):
         na = float(self._number("NA", self.objective, envelope, "objective", pick="hi"))
         wl = envelope.range("light.wavelength") or envelope.range("light.wavelengths")
         wl = wl or (0.5, 0.5)
-        _spacing, s, decision = detection_spacing(pitch, wl[0], na, oversample=self.oversample)
+        u_ref = self._reference_u(desc, envelope)
+        _spacing, s, decision = detection_spacing(
+            pitch, wl[0], na, reference_u=u_ref, oversample=self.oversample
+        )
         grid = Grid2D(tuple(self.camera.shape), pitch, (0.0, 0.0))
+        medium = desc.nodes.get(desc.part("environment")) or desc.nodes.get("environment")
+        if self.pupil_samples == "auto":
+            supercritical = False
+            if isinstance(medium, LayeredMedium):
+                n_s = float(medium.index(dtype=torch.float64).detach().reshape(-1).min())
+                supercritical = na > n_s
+            samples = 128 if supercritical else 64
+            rule = "128: supercritical collection" if supercritical else "64"
+        else:
+            samples, rule = int(self.pupil_samples), "pinned"
         return CoherentStatic(
-            decisions=(decision,),
+            decisions=(decision, Decision("pupil.samples", samples, rule, {"na": na})),
             grid=grid,
             oversample=s,
-            pupil_samples=self.pupil_samples,
+            pupil_samples=samples,
             na_max=na,
         )
 
@@ -189,13 +228,18 @@ class Coherent(Element[Irradiance]):
         list of Violation
             Findings.
         """
+        found = self._reference_validity(desc, envelope)
         medium = desc.nodes.get(desc.part("environment")) or desc.nodes.get("environment")
         if not isinstance(medium, Medium):
-            return []
+            return found
+        if isinstance(medium, LayeredMedium):
+            return found + self._layered_validity(desc, envelope, medium)
+        found += self._epi_validity(desc)
         ratio = ratio_per_image(self.objective, medium)  # NA/n per image, largest
         if ratio is None or ratio < 1.0:
-            return []
+            return found
         return [
+            *found,
             Violation(
                 "error",
                 "NA reaches the medium's index; coherent imaging of homogeneous media needs "
@@ -205,8 +249,153 @@ class Coherent(Element[Irradiance]):
                 limit=1.0,
                 element=desc.path or "coherent",
                 fix="lower the NA below the medium's index",
+            ),
+        ]
+
+    @staticmethod
+    def _epi_validity(desc: Description) -> list[Violation]:
+        """Report epi light in a homogeneous medium: iSCAT-lite, or no reference at all."""
+        if not any(getattr(node, "travel", 1) == -1 for node in desc.nodes.values()):
+            return []
+        where = desc.path or "coherent"
+        if any(isinstance(node, ReferenceBeam) for node in desc.nodes.values()):
+            return [
+                Violation(
+                    "info",
+                    "iSCAT-lite: epi light in a homogeneous medium against a constant reference; "
+                    "this approximation tier omits the Fresnel transmission, r_s/r_p(θ) and the "
+                    "index change at the coverslip",
+                    element=where,
+                    fix="a gx.env.LayeredMedium reflects the reference at the coverslip (§5.12)",
+                )
+            ]
+        return [
+            Violation(
+                "warn",
+                "epi light in a homogeneous medium: nothing reflects a reference, so the camera "
+                "records the backscatter alone",
+                element=where,
+                fix="give the Sample a gx.env.LayeredMedium, whose coverslip reflects the iSCAT "
+                "reference, or add an on-axis gx.light.ReferenceBeam (iSCAT-lite)",
             )
         ]
+
+    def _layered_validity(
+        self, desc: Description, envelope: Envelope, medium: LayeredMedium
+    ) -> list[Violation]:
+        """NA below the immersion's index; scatterers in the sample (z ≤ 0), near the interface."""
+        where = desc.path or "coherent"
+        found: list[Violation] = []
+        wl = envelope.range("light.wavelength") or envelope.range("light.wavelengths")
+        reach = wl[1] if wl is not None else 0.7  # "near": within a vacuum wavelength
+        ratio = ratio_per_image(self.objective, medium)  # NA over the immersion index
+        if ratio is not None and ratio >= 1.0:
+            found.append(
+                Violation(
+                    "error",
+                    "NA reaches the immersion's index",
+                    entry=f"{desc.part('objective')}.NA",
+                    value=ratio,
+                    limit=1.0,
+                    element=where,
+                    fix="lower the NA below the immersion index",
+                )
+            )
+        for name, node in desc.nodes.items():
+            if not isinstance(node, ObjectSet):
+                continue
+            z = envelope.range(f"{name}.position.z")
+            if z is None:
+                values = torch.as_tensor(node.position).detach()
+                z = (0.0, float(values[..., 2].max())) if values.numel() else None
+            if z is not None and z[1] > 0.0:
+                found.append(
+                    Violation(
+                        "error",
+                        f"scatterers {name!r} reach z > 0: in a layered medium the sample lies "
+                        "at z < 0, below the coverslip (§4.1)",
+                        entry=f"{name}.position.z",
+                        value=z[1],
+                        limit=0.0,
+                        element=where,
+                        fix="place the scatterers at z ≤ 0 (gx.coords.depth(d) gives z = −d)",
+                    )
+                )
+            elif z is not None and z[1] > -reach:
+                found.append(
+                    Violation(
+                        "info",
+                        f"scatterers {name!r} come within λ of the coverslip: the light they "
+                        "exchange with the interface by multiple reflection is not modelled "
+                        "(cap-32)",
+                        entry=f"{name}.position.z",
+                        value=z[1],
+                        limit=-reach,
+                        element=where,
+                    )
+                )
+        return found
+
+    def _reference_u(self, desc: Description, envelope: Envelope) -> float | None:
+        """Return the largest object-space direction |u_ref| = Mag·|sin θ| of the references."""
+        references = {k: v for k, v in desc.nodes.items() if isinstance(v, ReferenceBeam)}
+        if not references:
+            return None
+        mag = float(self._number("magnification", self.objective, envelope, "objective", "hi"))
+        largest = 0.0
+        for name, reference in references.items():
+            if reference.angle is None:
+                continue
+            x, y = envelope.range(f"{name}.angle.x"), envelope.range(f"{name}.angle.y")
+            if x is not None and y is not None:
+                sx = max(abs(math.sin(x[0])), abs(math.sin(x[1])))
+                sy = max(abs(math.sin(y[0])), abs(math.sin(y[1])))
+            else:  # an eager call reads the values
+                angle = torch.as_tensor(reference.angle).detach().reshape(-1, 2).abs()
+                sx, sy = (math.sin(float(v)) for v in angle.max(0).values)
+            largest = max(largest, mag * math.hypot(sx, sy))
+        return largest
+
+    def _reference_validity(self, desc: Description, envelope: Envelope) -> list[Violation]:
+        """Warn when an off-axis sideband overlaps the autocorrelation or aliases on the camera."""
+        u_ref = self._reference_u(desc, envelope)
+        if not u_ref:
+            return []
+        na = float(self._number("NA", self.objective, envelope, "objective", pick="hi"))
+        pitch = float(self._number("pixel_size", self.camera, envelope, "camera", pick="hi")) / (
+            float(self._number("magnification", self.objective, envelope, "objective"))
+        )
+        wl = envelope.range("light.wavelength") or envelope.range("light.wavelengths")
+        wl_min = wl[0] if wl is not None else 0.5
+        where = desc.path or "coherent"
+        found: list[Violation] = []
+        if u_ref < 3.0 * na:
+            found.append(
+                Violation(
+                    "warn",
+                    "the off-axis sideband overlaps the autocorrelation term: the reference "
+                    f"direction |u_ref| = {u_ref:.3g} is below 3·NA = {3 * na:.3g}",
+                    value=u_ref,
+                    limit=3.0 * na,
+                    element=where,
+                    fix="tilt the reference more (u_ref = Mag·sin θ)",
+                )
+            )
+        nyquist = wl_min / (2.0 * pitch)  # the camera's band edge, NA units
+        if u_ref + na > nyquist * math.sqrt(2.0):
+            found.append(
+                Violation(
+                    "warn",
+                    "the camera undersamples the off-axis sideband: |u_ref| + NA = "
+                    f"{u_ref + na:.3g} exceeds the pixels' band edge λ/(2p) = {nyquist:.3g} "
+                    "along the diagonal",
+                    value=u_ref + na,
+                    limit=nyquist * math.sqrt(2.0),
+                    element=where,
+                    fix="smaller object-space pixels (more magnification) or a smaller tilt",
+                )
+            )
+        return found
 
     def memory(self, desc: Description, static: Static) -> int | None:
         """Estimate the per-image peak bytes: the pupil work and one field per sphere.
@@ -260,11 +449,28 @@ class Coherent(Element[Irradiance]):
         """
         waves = inputs[1] if len(inputs) > 1 and isinstance(inputs[1], PlaneWaves) else None
         wl = float(waves.wavelengths.detach().min()) if waves is not None else 0.5
-        entries = {"light.wavelength": (wl, wl)}
+        entries: dict[str, tuple[float, float]] = {"light.wavelength": (wl, wl)}
         medium = inputs[2] if len(inputs) > 2 and isinstance(inputs[2], Node) else None
-        desc = Description(nodes={"environment": medium} if medium is not None else {})
+        nodes: dict[str, Node] = {"environment": medium} if medium is not None else {}
+        references = inputs[3] if len(inputs) > 3 else ()
+        for i, reference in enumerate(self._as_references(references)):
+            # the waves carry sin θ; the static sizing reads it back as an angle range
+            u = reference.u.detach().to(torch.float64).reshape(-1, 2).abs().max(0).values
+            ax, ay = (math.asin(min(float(v), 1.0)) for v in u)
+            nodes[f"reference{i}"] = ReferenceBeam(angle=torch.tensor([ax, ay]))
+        desc = Description(nodes=nodes)
         report(self.validity(desc, Envelope(entries)), "warn")  # errors raise
         return self.configure(desc, Envelope(entries))
+
+    @staticmethod
+    def _as_references(references: object) -> tuple[PlaneWaves, ...]:
+        if references is None:
+            return ()
+        if isinstance(references, PlaneWaves):
+            return (references,)
+        if isinstance(references, tuple) and all(isinstance(r, PlaneWaves) for r in references):
+            return references
+        raise StructureError("references must be PlaneWaves or a tuple of them")
 
     # ---- run time ---------------------------------------------------------------------------
 
@@ -275,7 +481,9 @@ class Coherent(Element[Irradiance]):
         ----------
         *inputs : object
             The contributions (an :class:`~gradix.ObjectSpectra` or a tuple of them), the
-            incident :class:`~gradix.PlaneWaves`, then the medium.
+            incident :class:`~gradix.PlaneWaves`, the medium, and optionally the image-side
+            references (:class:`~gradix.PlaneWaves` from :class:`~gradix.light.ReferenceBeam`,
+            one or a tuple).
         static : Static
             A :class:`CoherentStatic`.
 
@@ -284,12 +492,21 @@ class Coherent(Element[Irradiance]):
         Irradiance
             ``[B, A, 1, H, W]`` photons per pixel.
         """
-        background, scattered, optics, static = self._fields(inputs, static)
+        background, scattered, optics, static = self._fields(inputs[:3], static)
+        references = self._as_references(inputs[3] if len(inputs) > 3 else ())
         # explicit interference, term by term: weak scatterers keep their contrast (§4.4)
         intensity = background.real**2 + background.imag**2
         if scattered is not None:
             intensity = intensity + 2.0 * (background.conj() * scattered).real
             intensity = intensity + scattered.real**2 + scattered.imag**2
+        if references:
+            if background.shape[2] != 1:
+                msg = "an image-side reference needs one illumination mode (M = 1)"
+                raise StructureError(msg, fix="use a single coherent plane wave")
+            reference = self._references(references, optics)  # [B, A, 1, L, Hs, Ws]
+            obj = background if scattered is None else background + scattered
+            intensity = intensity + reference.real**2 + reference.imag**2
+            intensity = intensity + 2.0 * (reference.conj() * obj).real
         intensity = intensity.sum((2, 3))  # modes and bins: [B, A, Hs, Ws]
         s = static.oversample
         pixels = ops.pixel_mtf(intensity, s)[..., ::s, ::s]
@@ -314,7 +531,7 @@ class Coherent(Element[Irradiance]):
             whose squared magnitude, summed over modes and bins, is the image before the
             pixel MTF.
         """
-        background, scattered, _optics, _static = self._fields(inputs, static)
+        background, scattered, _optics, _static = self._fields(inputs[:3], static)
         return background if scattered is None else background + scattered
 
     def _fields(
@@ -327,8 +544,10 @@ class Coherent(Element[Irradiance]):
             contributions = (contributions,)
         if not isinstance(contributions, tuple) or not isinstance(waves, PlaneWaves):
             raise StructureError("Coherent takes a tuple of ObjectSpectra and PlaneWaves")
-        if not isinstance(medium, Medium) or medium.layered:
-            raise StructureError("Coherent images homogeneous media (layered media: M3a phase 3)")
+        if not isinstance(medium, Medium):
+            raise StructureError("Coherent needs a medium", fix="gx.env.Homogeneous(n)")
+        if medium.layered and not isinstance(medium, LayeredMedium):
+            raise StructureError(f"Coherent cannot image a {type(medium).__name__}")
         if not isinstance(static, CoherentStatic) or static.grid is None:
             raise StructureError("Coherent needs a CoherentStatic")
         optics = self._optics(contributions, waves, medium, static)
@@ -367,11 +586,17 @@ class Coherent(Element[Irradiance]):
 
         na = image(self.objective, ospec, "NA").reshape(-1)
         focus = image(self.objective, ospec, "focus")  # [B|1, A|1] (a setting)
-        pitch = (
-            image(self.camera, cspec, "pixel_size") / image(self.objective, ospec, "magnification")
-        ).reshape(-1)
+        magnification = image(self.objective, ospec, "magnification").reshape(-1)
+        pitch = (image(self.camera, cspec, "pixel_size").reshape(-1) / magnification).reshape(-1)
         index = medium.index(dtype=dtype, device=device)
         n = (index.real if index.is_complex() else index).reshape(-1)  # [B|1]
+        n_g = n_i = n
+        layered = isinstance(medium, LayeredMedium)
+        if isinstance(medium, LayeredMedium):
+            glass = medium.coverslip_index(dtype=dtype, device=device)
+            oil = medium.immersion_index(dtype=dtype, device=device)
+            n_g = (glass.real if glass.is_complex() else glass).reshape(-1)
+            n_i = (oil.real if oil.is_complex() else oil).reshape(-1)
         lam = waves.wavelengths.to(device=device, dtype=dtype)  # [B|1, L]
         s = static.oversample
         assert static.grid is not None
@@ -382,7 +607,22 @@ class Coherent(Element[Irradiance]):
         kx = torch.arange(width * s, device=device, dtype=dtype)
         ys = (ky // s + 0.5) * p + (ky % s) * p / s  # [B|1, Hs]
         xs = (kx // s + 0.5) * p + (kx % s) * p / s  # [B|1, Ws]
-        return _Optics(dtype, cdtype, device, na, n, focus, pitch, lam, xs, ys)
+        return _Optics(
+            dtype,
+            cdtype,
+            device,
+            na,
+            magnification,
+            n,
+            n_g,
+            n_i,
+            layered,
+            focus,
+            pitch,
+            lam,
+            xs,
+            ys,
+        )
 
     def _modifiers_at(self, u: Tensor, medium: Medium, o: _Optics) -> Tensor | None:
         """Evaluate the pupil modifiers at plane-wave directions ``u [B|1, A|1, M, J, 2]``.
@@ -398,9 +638,9 @@ class Coherent(Element[Irradiance]):
         q = u.to(torch.float64).reshape(b, 1, 1, a * m * j, 2)
         wl = o.lam.to(torch.float64)[:, :, None, None]  # [B|1, L, 1, 1]
         fx, fy = q[..., 0] / wl, q[..., 1] / wl  # [B, L, 1, Q]
-        ctx = PupilContext(
+        ctx = PupilContext(  # the pupil is defined in the immersion
             na=o.na.to(torch.float64).reshape(-1, 1, 1, 1),
-            n=o.n.to(torch.float64).reshape(-1, 1, 1, 1),
+            n=o.n_i.to(torch.float64).reshape(-1, 1, 1, 1),
         )
         total = modifiers[0](fx, fy, wl, ctx)
         for modifier in modifiers[1:]:
@@ -414,6 +654,9 @@ class Coherent(Element[Irradiance]):
         self, waves: PlaneWaves, medium: Medium, o: _Optics, static: CoherentStatic
     ) -> Tensor:
         """Return the background plane waves on the camera samples, ``[B, A, M, L, Hs, Ws]``."""
+        if o.layered:
+            assert isinstance(medium, LayeredMedium)
+            return self._background_layered(waves, medium, o, static)
         dtype, device = o.dtype, o.device
         n = o.n.reshape(-1, 1, 1, 1, 1)
         na = o.na.reshape(-1, 1, 1, 1, 1)
@@ -440,6 +683,100 @@ class Coherent(Element[Irradiance]):
         modifiers = self._modifiers_at(u, medium, o)
         if modifiers is not None:
             amp = amp * modifiers
+        return self._on_camera(amp, u, o)
+
+    def _background_layered(
+        self, waves: PlaneWaves, medium: LayeredMedium, o: _Optics, static: CoherentStatic
+    ) -> Tensor:
+        """Return the background through a layered medium: transmitted light or the epi echo."""
+        dtype, device = o.dtype, o.device
+        u = waves.u.to(device=device, dtype=dtype)  # [B|1, A|1, M, J, 2]
+        radius = safe_sqrt((u * u).sum(-1))[..., None]  # [B|1, A|1, M, J, 1]
+        u2 = radius * radius
+        five = (-1, 1, 1, 1, 1)
+        wl = o.lam[:, None, None, None, :]  # [B|1, 1, 1, 1, L]
+        n_s, n_g, n_i = (t.reshape(five) for t in (o.n, o.n_g, o.n_i))
+        kzs, kzg, kzi = (fresnel.axial(n, u2, wl) for n in (n_s, n_g, n_i))
+        du = 2.0 * static.na_max * _PAD / static.pupil_samples
+        aperture = ops.soft_aperture(radius, o.na.reshape(five), du)
+        focus5 = o.focus.reshape(o.focus.shape[0], o.focus.shape[1], 1, 1, 1)
+        phase = kzi * focus5  # the interface (z = 0) to the focal plane, in the immersion
+        mismatch = medium.mismatch_phase(u2, wl)
+        if mismatch is not None:
+            phase = phase + mismatch
+        flux = _flux(kzi)
+        t_gi = fresnel.transmission(kzg, kzi, n_g, n_i)
+        if waves.travel == 1:  # transmitted light, defined in the sample at z0
+            z0 = torch.as_tensor(waves.z0, dtype=dtype, device=device)
+            t_sg = fresnel.transmission(kzs, kzg, n_s, n_g)
+            k_s = 2.0 * math.pi * n_s / wl
+            factor = t_sg * t_gi * flux / torch.sqrt(k_s) * torch.exp(1j * kzs * (0.0 - z0))
+        else:  # epi light, defined in the coverslip at the interface: its reflection
+            r = fresnel.reflection(kzg, kzs, n_g, n_s)
+            k_g = 2.0 * math.pi * n_g / wl
+            factor = r * t_gi * flux / torch.sqrt(k_g)
+        amp = waves.amplitude[..., 0].to(device=device, dtype=o.cdtype) * (
+            aperture * factor * torch.exp(1j * phase)
+        ).to(o.cdtype)  # [B, A, M, J, L]
+        modifiers = self._modifiers_at(u, medium, o)
+        if modifiers is not None:
+            amp = amp * modifiers
+        return self._on_camera(amp, u, o)
+
+    def _incident(self, waves: PlaneWaves, pos: Tensor, o: _Optics) -> Tensor:
+        """Return each incident wave at the spheres, in the sample: ``[B, A, M, J, L, N]``.
+
+        Epi light in a layered medium is transmitted into the sample first (t_s·√(n_s/n_g):
+        field amplitudes normalised to the irradiance in each medium).
+        """
+        if o.layered and waves.travel != 1:
+            u = waves.u.to(device=o.device, dtype=o.dtype)
+            u2 = (u * u).sum(-1)[..., None]  # [B|1, A|1, M, J, 1]
+            five = (-1, 1, 1, 1, 1)
+            wl = o.lam[:, None, None, None, :]
+            n_s, n_g = o.n.reshape(five), o.n_g.reshape(five)
+            kzs, kzg = fresnel.axial(n_s, u2, wl), fresnel.axial(n_g, u2, wl)
+            t = fresnel.transmission(kzg, kzs, n_g, n_s) * torch.sqrt(n_s / n_g)
+            amplitude = waves.amplitude * t.to(waves.amplitude.dtype)[..., None]
+            waves = waves.replace(amplitude=amplitude, z0=0.0)
+        return waves.at_waves(pos, o.n.reshape(-1, 1))[..., 0, :]
+
+    def _collection(self, u2: Tensor, medium: Medium, o: _Optics) -> tuple[Tensor, Tensor, Tensor]:
+        """Return the s and p collection weights C/k_z,s and the pupil phase's axial wavenumbers.
+
+        ``u2 [K]`` are the pupil samples. Returns ``c_s``, ``c_p`` as ``[B|1, 1, 1, 1, L, 1, K]``
+        (the f-measure's 1/k_z,s folded in, finite at the critical angle) and the complex
+        ``(k_z,s, k_z,i)`` as ``[B|1, 1, 1, L, 1, K]``.
+        """
+        seven = (-1, 1, 1, 1, 1, 1, 1)
+        wl = o.lam.reshape(o.lam.shape[0], 1, 1, 1, o.lam.shape[1], 1, 1)
+        n_s, n_g, n_i = (t.to(torch.float64).reshape(seven) for t in (o.n, o.n_g, o.n_i))
+        wl = wl.to(torch.float64)
+        kzs, kzg, kzi = (fresnel.axial(n, u2, wl) for n in (n_s, n_g, n_i))
+        k_s = 2.0 * math.pi * n_s / wl
+        if o.layered:
+            # t/k_z,s through the sample–coverslip interface, finite where k_z,s → 0
+            s_over = 2.0 / (kzs + kzg)
+            p_over = 2.0 * n_s * n_g / (n_g * n_g * kzs + n_s * n_s * kzg)
+            flux = _flux(kzi) / torch.sqrt(k_s)
+            c_s = s_over * fresnel.transmission(kzg, kzi, n_g, n_i, "s") * flux
+            c_p = p_over * fresnel.transmission(kzg, kzi, n_g, n_i, "p") * flux
+        else:
+            # homogeneous: only propagating waves reach the far field; √cosθ/k_z = 1/√(k·k_z)
+            inside = u2 < n_s * n_s
+            real_kz = torch.where(inside, kzs.real, torch.ones_like(kzs.real))
+            weight = torch.where(inside, 1.0 / torch.sqrt(k_s * real_kz), torch.zeros_like(real_kz))
+            c_s = c_p = weight.to(kzs.dtype)
+        kz_pair = torch.stack([kzs[:, :, :, 0], kzi[:, :, :, 0]])  # drop J: [2, B, A, M, L, N, K]
+        return c_s, c_p, kz_pair
+
+    def _on_camera(self, amp: Tensor, u: Tensor, o: _Optics) -> Tensor:
+        """Sum plane waves on the camera samples: ``[B, A, M, L, Hs, Ws]``.
+
+        ``amp [B, A, M, J, L]`` are the waves' amplitudes and ``u [B, A, M, J, 2]`` their
+        object-space directions.
+        """
+        wl = o.lam[:, None, None, None, :]  # [B|1, 1, 1, 1, L]
         k0 = (2.0 * math.pi / wl)[..., None]  # [B|1, 1, 1, 1, L, 1]
         ux, uy = u[..., 0][..., None, None], u[..., 1][..., None, None]  # [B, A, M, J, 1, 1]
         phx = k0 * ux * o.xs.reshape(o.xs.shape[0], 1, 1, 1, 1, -1)
@@ -447,6 +784,22 @@ class Coherent(Element[Irradiance]):
         wave_x = torch.polar(torch.ones_like(phx), phx)  # [B, A, M, J, L, Ws]
         wave_y = torch.polar(torch.ones_like(phy), phy)  # [B, A, M, J, L, Hs]
         return torch.einsum("bamjl,bamjly,bamjlx->bamlyx", amp, wave_y, wave_x)
+
+    def _references(self, references: tuple[PlaneWaves, ...], o: _Optics) -> Tensor:
+        """Return the image-side references on the camera samples, ``[B, A, 1, L, Hs, Ws]``.
+
+        Each carries ``sin θ`` on the image side; the object-space direction is Mag·sin θ, and
+        the wave reaches the camera without aperture or apodisation (§4.5, construction 4).
+        """
+        total: Tensor | None = None
+        for reference in references:
+            u = reference.u.to(device=o.device, dtype=o.dtype)
+            u = u * o.magnification.reshape(-1, 1, 1, 1, 1)  # object-space directions
+            amp = reference.amplitude[..., 0].to(device=o.device, dtype=o.cdtype)
+            field = self._on_camera(amp, u, o)
+            total = field if total is None else total + field
+        assert total is not None
+        return total
 
     def _scattered(
         self,
@@ -501,12 +854,13 @@ class Coherent(Element[Irradiance]):
         s1 = a8 @ pi_t + b8 @ tau_t  # [B, A, M, J, L, N, K]
         s2 = a8 @ tau_t + b8 @ pi_t
         cos2 = cos2.to(dtype)[..., None, :]  # [B|1, A|1, M, J, 1, 1, K]
-        s_par = s2 * cos2 + s1 * (1.0 - cos2)
+        c_s, c_p, kz_pair = self._collection(u2, medium, o)  # [B|1, 1, 1, 1, L, 1, K]
+        s_par = c_p.to(cdtype) * s2 * cos2 + c_s.to(cdtype) * s1 * (1.0 - cos2)
         k_m = 2.0 * math.pi * o.n.reshape(-1, 1) / o.lam  # [B|1, L]: per-image index or bins
         k_m = k_m.reshape(k_m.shape[0], 1, 1, 1, k_m.shape[1], 1, 1)  # [B|1, 1, 1, 1, L, 1, 1]
         f = (1j * s_par) / k_m  # scattering amplitude f = iS/k, µm
         # ---- incident waves at the spheres, each on its own: [B, A, M, J, L, N, 1] ----
-        incident = waves.at_waves(pos, o.n.reshape(-1, 1))[..., 0, :].to(cdtype)
+        incident = self._incident(waves, pos, o).to(cdtype)
         if spectra.presence is not None:
             presence = spectra.presence.to(device=device, dtype=dtype)  # [B|1, A|1, N]
             incident = incident * presence[:, :, None, None, None, :]
@@ -516,20 +870,27 @@ class Coherent(Element[Irradiance]):
         seven = (-1, 1, 1, 1, 1, 1, 1)
         up = u.to(dtype)
         uyp, uxp = torch.meshgrid(up, up, indexing="ij")
-        u2p = uxp * uxp + uyp * uyp
-        aperture = ops.soft_aperture(torch.sqrt(u2p), o.na.reshape(seven), du)
-        n7 = o.n.reshape(seven)
-        wl7 = o.lam.reshape(o.lam.shape[0], 1, 1, o.lam.shape[1], 1, 1, 1)
-        inside = u2p < n7 * n7  # the far field holds propagating waves only
-        cos = torch.sqrt(torch.clamp(1.0 - u2p / (n7 * n7), min=1e-12))
-        kz = 2.0 * math.pi * n7 * cos / wl7
+        aperture = ops.soft_aperture(torch.sqrt(uxp * uxp + uyp * uyp), o.na.reshape(seven), du)
+        # the axial wavenumbers on the pupil grid: [B|1, 1, 1, L, 1, P, P]
+        kzs, kzi = (k.reshape(*k.shape[:-1], samples, samples) for k in kz_pair)
         focus7 = o.focus.reshape(o.focus.shape[0], o.focus.shape[1], 1, 1, 1, 1, 1)
-        z7 = pos[..., 2].reshape(pos.shape[0], pos.shape[1], 1, 1, count, 1, 1)
-        phase = kz * (focus7 - z7)  # [B, A, 1, L, N, P, P]
-        # pupil in f-measure: (2π)²·A(k⊥) = 2πi·f·E_inc/k_z, propagated to the focal plane, with
-        # the aplanatic √cosθ that conserves the collected power (§5.3)
-        weight = torch.where(inside, aperture * torch.sqrt(cos) / kz, torch.zeros_like(kz))
-        pupil = (2j * math.pi) * weight * torch.polar(torch.ones_like(phase), phase)
+        z7 = pos[..., 2].to(torch.float64).reshape(pos.shape[0], pos.shape[1], 1, 1, count, 1, 1)
+        if o.layered:
+            # to the interface in the sample (evanescent parts decay), then to the focal plane
+            # in the immersion, with the coverslip's Gibson–Lanni mismatch
+            depth = torch.clamp(-z7, min=0.0)
+            phase = kzs * depth + kzi * focus7.to(torch.float64)
+            wl64 = o.lam.to(torch.float64).reshape(o.lam.shape[0], 1, 1, o.lam.shape[1], 1, 1, 1)
+            u2_grid = (uxp * uxp + uyp * uyp).to(torch.float64)
+            assert isinstance(medium, LayeredMedium)
+            mismatch = medium.mismatch_phase(u2_grid, wl64)
+            if mismatch is not None:
+                phase = phase + mismatch
+        else:
+            phase = kzs * (focus7.to(torch.float64) - z7)  # [B, A, 1, L, N, P, P]
+        # pupil in f-measure: (2π)²·A(k⊥) = 2πi·f·E_inc/k_z with the collection folded into
+        # c_s and c_p above; here the aperture and the propagation to the focal plane
+        pupil = (2j * math.pi) * aperture * torch.exp(1j * phase).to(cdtype)
         table = o.lam.to(torch.float64)[:, None, :]  # [B|1, 1, L]
         modifiers = fused_modifiers(self.objective, table, u, o.na, medium)
         if modifiers is not None:  # [B|1, 1, L, P, P]

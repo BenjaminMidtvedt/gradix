@@ -760,10 +760,18 @@
     "role": "pixels",
     "shape_affecting": false,
     "unit": "photons"
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "references",
+    "optional": false,
+    "required": false
    }
   ],
   "name": "microscope",
-  "version": 1
+  "version": 2
  },
  "core:ObjectSpectra": {
   "class": "gradix._core.carriers.ObjectSpectra",
@@ -2492,10 +2500,18 @@
     "role": "pixels",
     "shape_affecting": false,
     "unit": "photons"
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "references",
+    "optional": false,
+    "required": false
    }
   ],
   "name": "microscope",
-  "version": 1
+  "version": 2
  },
  "data_object:optics.objective": {
   "class": "gradix.optics.objective.Objective",
@@ -2702,7 +2718,7 @@
    },
    {
     "choices": null,
-    "default": 64,
+    "default": "auto",
     "kind": "static",
     "name": "pupil_samples",
     "optional": false,
@@ -2710,7 +2726,7 @@
    }
   ],
   "name": "coherent.pupil",
-  "version": 1
+  "version": 2
  },
  "element:detect.camera": {
   "class": "gradix.detect.camera.Camera",
@@ -3264,9 +3280,90 @@
     "name": "polarization",
     "optional": true,
     "required": false
+   },
+   {
+    "choices": [
+     1,
+     -1
+    ],
+    "default": 1,
+    "kind": "static",
+    "name": "travel",
+    "optional": false,
+    "required": false
    }
   ],
   "name": "source.plane_waves",
+  "version": 2
+ },
+ "element:source.reference": {
+  "class": "gradix.light.reference.ReferenceBeam",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "irradiance",
+    "optional": false,
+    "quantity": "irradiance",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b2"
+   },
+   {
+    "components": [
+     "x",
+     "y"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     2
+    ],
+    "kind": "tensor",
+    "name": "angle",
+    "optional": true,
+    "quantity": "angle",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "rad"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "phase",
+    "optional": false,
+    "quantity": "angle",
+    "required": false,
+    "role": "setting",
+    "shape_affecting": false,
+    "unit": "rad"
+   },
+   {
+    "choices": [
+     "image"
+    ],
+    "default": "image",
+    "kind": "static",
+    "name": "path",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "source.reference",
   "version": 1
  },
  "element:source.sim_beams": {
@@ -4782,6 +4879,69 @@
    }
   ],
   "name": "voxels",
+  "version": 1
+ },
+ "pupil_modifier:filter": {
+  "class": "gradix.optics.pupil.Filter",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "radius",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "transmission",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "phase",
+    "optional": false,
+    "quantity": "angle",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "rad"
+   },
+   {
+    "choices": null,
+    "default": 0.01,
+    "kind": "static",
+    "name": "edge",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "filter",
   "version": 1
  },
  "pupil_modifier:pixel_pupil": {

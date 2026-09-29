@@ -15,7 +15,7 @@ from gradix._core.precision import result_dtype
 from gradix.conventions import safe_sqrt
 from gradix.light.polarization import Polarization
 from gradix.schema.base import iter_leaves
-from gradix.schema.fields import child, field
+from gradix.schema.fields import child, field, knob
 from gradix.schema.layout import canonical, common_device
 
 __all__ = ["PlaneWave"]
@@ -37,6 +37,11 @@ class PlaneWave(Element[PlaneWaves]):
         Irradiance at the sample in photons/µm² per exposure, or per image ``[B]``.
     polarization : Polarization, optional
         Polarisation state; None is scalar light (P = 1).
+    travel : {1, -1}, default 1
+        +1 travels toward the objective (transmitted illumination, defined in the sample
+        medium); −1 away from it (epi illumination through the objective, defined in the
+        coverslip when the medium is layered, where the coverslip reflects the iSCAT
+        reference).
 
     Examples
     --------
@@ -50,6 +55,8 @@ class PlaneWave(Element[PlaneWaves]):
     caps: ClassVar[Capabilities] = Capabilities(
         accepts=frozenset(), produces=PlaneWaves, polarization=frozenset({1, 2})
     )
+    schema_version: ClassVar[int] = 2
+    """2: the travel direction (epi illumination, M3a)."""
 
     wavelength: Tensor | float = field(
         quantity="wavelength",
@@ -75,6 +82,7 @@ class PlaneWave(Element[PlaneWaves]):
         doc="photons per µm² per exposure",
     )
     polarization: Polarization | None = child(default=None, doc="polarisation state")
+    travel: int = knob(default=1, choices=(1, -1), doc="+1 toward the objective, -1 away")
 
     def forward(self, *inputs: object, static: Static) -> PlaneWaves:
         """Build the plane waves.
@@ -111,7 +119,9 @@ class PlaneWave(Element[PlaneWaves]):
         amplitude = amp[:, None, :, None, None, :]  # [B|1, 1, M, 1, 1, P]
         modes = jones.shape[1]
         direction = u[:, None, None, None, :].expand(u.shape[0], 1, modes, 1, 2)
-        return PlaneWaves(amplitude=amplitude, u=direction, wavelengths=wl, z0=0.0, travel=1)
+        return PlaneWaves(
+            amplitude=amplitude, u=direction, wavelengths=wl, z0=0.0, travel=self.travel
+        )
 
     def __call__(
         self, *inputs: object, grid: object = None, static: Static | None = None

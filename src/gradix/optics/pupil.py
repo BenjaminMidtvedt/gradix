@@ -20,7 +20,7 @@ from gradix.schema.fields import field, knob
 from gradix.schema.layout import canonical
 from gradix.special.zernike import zernike_ansi
 
-__all__ = ["PixelPupil", "PupilContext", "PupilModifier", "Zernike"]
+__all__ = ["Filter", "PixelPupil", "PupilContext", "PupilModifier", "Zernike"]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -213,3 +213,74 @@ class PixelPupil(PupilModifier):
         else:
             amp = self._sample("amplitude", ux, uy, na)[:, None].expand_as(phase)
         return torch.polar(amp, phase)
+
+
+@register.pupil_modifier("filter")
+@dataclasses.dataclass(frozen=True, kw_only=True, eq=False)
+class Filter(PupilModifier):
+    """A central pupil filter: an amplitude and a phase inside a disc about the axis.
+
+    In iSCAT it attenuates (and may phase-shift) the reflected reference, which passes the pupil
+    at its centre, to raise the contrast; scattered light inside the disc is filtered with it.
+    As a background is evaluated at its own direction, the filter acts on it exactly (§4.4).
+
+    Parameters
+    ----------
+    radius : Tensor or float
+        Disc radius in NA units, or per image ``[B]``.
+    transmission : Tensor or float, default 1.0
+        Amplitude transmission inside the disc (its square is the power transmission).
+    phase : Tensor or float, default 0.0
+        Phase inside the disc, rad.
+    edge : float, default 0.01
+        Width of the soft edge, NA units.
+
+    Examples
+    --------
+    >>> import torch
+    >>> Filter(radius=0.1, transmission=0.1).transmission
+    0.1
+    """
+
+    radius: Tensor | float = field(
+        quantity="dimensionless", role="image", constraint="positive", doc="disc radius, NA units"
+    )
+    transmission: Tensor | float = field(
+        quantity="dimensionless",
+        role="image",
+        constraint="nonnegative",
+        default=1.0,
+        doc="amplitude transmission inside the disc",
+    )
+    phase: Tensor | float = field(quantity="angle", role="image", default=0.0, doc="phase")
+    edge: float = knob(default=0.01, doc="soft edge width, NA units")
+
+    def __call__(self, fx: Tensor, fy: Tensor, wl: Tensor, ctx: PupilContext) -> Tensor:
+        """Evaluate ``1 + s(u)·(t·e^{iφ} − 1)``, s a smoothstep that is 1 inside the disc.
+
+        Parameters
+        ----------
+        fx : Tensor
+            Pupil frequencies along x, cycles/µm.
+        fy : Tensor
+            Pupil frequencies along y, cycles/µm.
+        wl : Tensor
+            Vacuum wavelengths, µm.
+        ctx : PupilContext
+            NA and index.
+
+        Returns
+        -------
+        Tensor
+            Complex multiplier ``[B|1, L, Ky, Kx]``.
+        """
+        spec = self.schema()
+        real = torch.float64 if fx.dtype == torch.float64 else torch.float32
+        radius = canonical(self.radius, spec["radius"], dtype=real, device=fx.device)
+        t = canonical(self.transmission, spec["transmission"], dtype=real, device=fx.device)
+        phi = canonical(self.phase, spec["phase"], dtype=real, device=fx.device)
+        u = torch.sqrt((fx * wl) ** 2 + (fy * wl) ** 2)
+        s = torch.clamp((radius.reshape(-1, 1, 1, 1) - u) / self.edge + 0.5, 0.0, 1.0)
+        s = s * s * (3.0 - 2.0 * s)
+        inner = torch.polar(t.reshape(-1, 1, 1, 1), phi.reshape(-1, 1, 1, 1))
+        return 1.0 + s * (inner - 1.0)

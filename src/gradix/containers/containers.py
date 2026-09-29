@@ -89,6 +89,8 @@ class Microscope(Node):
         Acquisition axes (M1).
     background : Tensor or float, optional
         Background photons per pixel per exposure.
+    references : Mapping[str, Element], optional
+        Reference beams by name (off-axis holography, M3a), in the order they join the light.
 
     Examples
     --------
@@ -104,6 +106,8 @@ class Microscope(Node):
 
     registry_name: ClassVar[str | None] = "microscope"
     """Stable name for signatures and saved inputs."""
+    schema_version: ClassVar[int] = 2
+    """2: reference beams (M3a)."""
 
     objective: Objective = child(doc="the objective")
     camera: Camera = child(doc="the camera")
@@ -111,6 +115,9 @@ class Microscope(Node):
     acquisition: Node | None = child(default=None, doc="acquisition axes")
     background: Tensor | float | None = field(
         quantity="photons", role="pixels", constraint="nonnegative", default=None, doc="background"
+    )
+    references: Mapping[str, Element] = child(
+        container="mapping", default_factory=dict, ordered=True, doc="reference beams by name"
     )
 
     def __post_init__(self) -> None:
@@ -125,11 +132,13 @@ class Microscope(Node):
         Returns
         -------
         dict of str to Node
-            ``objective``, ``camera`` and, when present, ``light`` and ``acquisition``.
+            ``objective``, ``camera`` and, when present, ``light``, ``acquisition`` and the
+            references by name.
         """
         out: dict[str, Node] = {"objective": self.objective, "camera": self.camera}
         if self.light is not None:
             out["light"] = self.light
         if self.acquisition is not None:
             out["acquisition"] = self.acquisition
+        out.update(self.references)
         return out

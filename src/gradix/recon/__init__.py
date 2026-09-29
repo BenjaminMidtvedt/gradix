@@ -8,5 +8,7 @@ frames alike, and :func:`gradix.crlb` measures what their linear part keeps.
 
 from gradix.recon.base import ChainOptics, Reconstruction, optics_of
 from gradix.recon.inline import Inline
+from gradix.recon.iscat import ISCATContrast
+from gradix.recon.offaxis import OffAxis
 
-__all__ = ["ChainOptics", "Inline", "Reconstruction", "optics_of"]
+__all__ = ["ChainOptics", "ISCATContrast", "Inline", "OffAxis", "Reconstruction", "optics_of"]

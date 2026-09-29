@@ -67,13 +67,17 @@ NORMALIZE = ("background", "incident", "none")
 LAYOUTS = ("complex", "re_im", "phase", "amplitude")
 """How :class:`Field` lays the complex field out."""
 
+SAMPLINGS = ("centre", "mean")
+"""How :class:`Field` takes one value per camera pixel."""
+
 
 @dataclasses.dataclass(frozen=True)
 class Field:
     """The complex image field on the camera grid: what a reconstruction should recover.
 
-    Coherent Chains only. The field is formed on the detection samples and averaged over each
-    camera pixel (complex averaging), for one incoherent mode and one wavelength bin.
+    Coherent Chains only, for one incoherent mode and one wavelength bin. The field is formed
+    on the detection samples; each camera pixel takes the sample at its centre (the
+    band-limited field that a reconstruction recovers) or the complex mean over the pixel.
 
     Parameters
     ----------
@@ -85,6 +89,8 @@ class Field:
     layout : {"complex", "re_im", "phase", "amplitude"}, default "complex"
         Complex ``[B, A, H, W]``; real ``[B, A, H, W, 2]``; ``arg`` of the field in rad; or
         ``|E|``.
+    sampling : {"centre", "mean"}, default "centre"
+        The value at each pixel's centre, or the complex mean over the pixel.
 
     Raises
     ------
@@ -94,12 +100,15 @@ class Field:
 
     normalize: str = "background"
     layout: str = "complex"
+    sampling: str = "centre"
 
     def __post_init__(self) -> None:
         if self.normalize not in NORMALIZE:
             raise StructureError(f"unknown normalize={self.normalize!r}", fix=f"one of {NORMALIZE}")
         if self.layout not in LAYOUTS:
             raise StructureError(f"unknown layout={self.layout!r}", fix=f"one of {LAYOUTS}")
+        if self.sampling not in SAMPLINGS:
+            raise StructureError(f"unknown sampling={self.sampling!r}", fix=f"one of {SAMPLINGS}")
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serialisable description.
@@ -107,9 +116,14 @@ class Field:
         Returns
         -------
         dict
-            ``{"type": "field", "normalize": …, "layout": …}``.
+            ``{"type": "field", "normalize": …, "layout": …, "sampling": …}``.
         """
-        return {"type": "field", "normalize": self.normalize, "layout": self.layout}
+        return {
+            "type": "field",
+            "normalize": self.normalize,
+            "layout": self.layout,
+            "sampling": self.sampling,
+        }
 
 
 OutputSpec = Union[Image, Expected, Field, Node]  # noqa: UP007 - a runtime alias in isinstance
