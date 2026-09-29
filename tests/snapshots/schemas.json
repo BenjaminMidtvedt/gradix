@@ -2171,6 +2171,72 @@
   "name": "chain",
   "version": 1
  },
+ "data_object:device.phase_slm": {
+  "class": "gradix.devices.slm.PhaseSLM",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     -1,
+     -1
+    ],
+    "kind": "tensor",
+    "name": "phase",
+    "optional": true,
+    "quantity": "angle",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "rad"
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "shape",
+    "optional": true,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "pitch",
+    "optional": true,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "wavelength",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": "unit_interval",
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "zero_order",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   }
+  ],
+  "name": "device.phase_slm",
+  "version": 1
+ },
  "data_object:dipole.isotropic": {
   "class": "gradix.objects.labeling.Isotropic",
   "fields": [],
@@ -3456,6 +3522,128 @@
    }
   ],
   "name": "source.reference",
+  "version": 1
+ },
+ "element:source.shaped": {
+  "class": "gradix.light.shaped.Shaped",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelength",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "na",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [
+     -1,
+     -1
+    ],
+    "kind": "tensor",
+    "name": "pupil_field",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "device",
+    "optional": true,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": 16,
+    "kind": "static",
+    "name": "samples",
+    "optional": false,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "irradiance",
+    "optional": false,
+    "quantity": "irradiance",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b2"
+   },
+   {
+    "components": [
+     "x",
+     "y"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     2
+    ],
+    "kind": "tensor",
+    "name": "center",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "choices": [
+     1,
+     -1
+    ],
+    "default": 1,
+    "kind": "static",
+    "name": "travel",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "source.shaped",
   "version": 1
  },
  "element:source.sim_beams": {

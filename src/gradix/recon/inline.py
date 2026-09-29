@@ -10,7 +10,7 @@ from torch import Tensor
 from gradix._core.errors import StructureError
 from gradix.compose.chain import Chain
 from gradix.ops.propagation import angular_spectrum
-from gradix.recon.base import Reconstruction, optics_of
+from gradix.recon.base import Reconstruction, optics_of, without_scatterers
 
 __all__ = ["Inline"]
 
@@ -68,6 +68,8 @@ class Inline(Reconstruction):
         distance: float | Tensor = 0.0,
         background: float | Tensor | None = None,
         pad: int = 16,
+        *,
+        normalize: bool = False,
     ) -> Inline:
         """Read the pitch, wavelength, index and NA from a coherent Chain.
 
@@ -81,14 +83,38 @@ class Inline(Reconstruction):
             Background intensity in the camera's unit; None uses each frame's median.
         pad : int, default 16
             Zero padding, pixels.
+        normalize : bool, default False
+            Calibrate on the Chain rendered without its scatterers (a fixed background frame,
+            which makes the reconstruction affine, as :func:`gradix.crlb` needs).
 
         Returns
         -------
         Inline
             The reconstruction.
+
+        Raises
+        ------
+        StructureError
+            If both ``background`` and ``normalize`` are given.
         """
         o = optics_of(chain)
+        if normalize:
+            if background is not None:
+                raise StructureError("give background= or normalize=True, not both")
+            empty = without_scatterers(chain)
+            background = empty(outputs=("expected",))["expected"].detach()
         return cls(o.pitch, o.wavelength, o.n, o.na, distance, background, pad)
+
+    @property
+    def is_linear(self) -> bool:
+        """Whether the reconstruction is affine: only with a fixed background.
+
+        Returns
+        -------
+        bool
+            False when the background is estimated from each frame (its median).
+        """
+        return self.background is not None
 
     def linear(self, frames: Tensor) -> Tensor:
         """Return the refocused field: affine in the frames (the part a bound measures).

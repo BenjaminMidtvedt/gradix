@@ -6,6 +6,11 @@ the same parameter in every image gives every image's column at once, so the cos
 forward-mode pass per parameter *of an image*, whatever the batch size. A value shared by all
 images (a Python number, or a tensor without a batch axis) is one parameter that every image
 informs; a Schur complement combines those with the per-image parameters exactly.
+
+Through a reconstruction R (ADR-44, §5.12) the information is that of R's output under the
+camera noise it propagates: F_R = (RJ)ᵀ(RΣRᵀ)⁺(RJ), solved by conjugate gradients on
+matrix-free products of R and its adjoint, and differentiated through a form stationary in the
+solver's output.
 """
 
 from __future__ import annotations
@@ -33,6 +38,7 @@ from gradix.imaging._shared import ratio_per_image
 from gradix.imaging.point_psf import PointPSF
 from gradix.imaging.strata import Strata
 from gradix.optics.objective import Objective
+from gradix.recon.base import Reconstruction
 from gradix.schema.base import Node, tree_axis_sizes
 from gradix.schema.fields import FieldSpec
 from gradix.schema.layout import ROLE_RULES, leading_axes
@@ -78,6 +84,8 @@ class CRLB(Mapping[str, Tensor]):
         How the Jacobian was computed.
     notes : tuple of str
         Findings: the noise model's accuracy and any warnings raised on the way.
+    reconstruction : str, optional
+        The reconstruction the information was taken through; None for the raw frames.
     """
 
     std: Mapping[str, Tensor]
@@ -88,6 +96,7 @@ class CRLB(Mapping[str, Tensor]):
     units: Mapping[str, str]
     method: str
     notes: tuple[str, ...] = ()
+    reconstruction: str | None = None
 
     def __getitem__(self, path: str) -> Tensor:
         try:
@@ -110,9 +119,10 @@ class CRLB(Mapping[str, Tensor]):
             The report.
         """
         own = len(self.labels) - self.shared
+        through = f" · through {self.reconstruction}" if self.reconstruction else ""
         lines = [
             f"CRLB · {own} parameter(s) per image, {self.shared} shared · Jacobian by "
-            f"{self.method} {'mode' if self.method == 'forward' else 'differences'}"
+            f"{self.method} {'mode' if self.method == 'forward' else 'differences'}{through}"
         ]
         for path, std in self.std.items():
             finite = std[torch.isfinite(std)]
@@ -189,6 +199,9 @@ def crlb(
     wrt: str | Sequence[str] = (),
     *,
     method: Literal["auto", "forward", "central"] = "auto",
+    reconstruction: Reconstruction | Callable[[Tensor], Tensor] | None = None,
+    tolerance: float = 1e-8,
+    iterations: int = 1000,
 ) -> CRLB:
     """Return the Cramér–Rao lower bounds of fields of a Chain under its camera's noise.
 
@@ -215,6 +228,18 @@ def crlb(
         How the Jacobian is computed: forward-mode AD (``torch.func.jvp``), or central
         differences (two renders per parameter, for elements without forward mode). ``"auto"``
         uses forward mode and falls back to central differences with a warning.
+    reconstruction : Reconstruction or callable, optional
+        Bound what a reconstruction keeps: a :class:`gradix.recon.Reconstruction` (its
+        ``linear`` part), or a callable affine in frames ``[B, C, H, W]``. None bounds the raw
+        frames. The reconstruction is held fixed: gradients flow through the frames' mean and
+        variance, not through its own parameters.
+    tolerance : float, default 1e-8
+        With a reconstruction: the conjugate gradients stop once ten iterations raise the
+        information by less than this fraction. An early stop underestimates the information
+        (the stationary form is a lower bound for any iterate), so the bound errs on the
+        conservative side.
+    iterations : int, default 1000
+        Most conjugate-gradient iterations (with a reconstruction).
 
     Returns
     -------
@@ -226,8 +251,8 @@ def crlb(
     Raises
     ------
     StructureError
-        If a path names no real tensor field, two paths overlap, or the camera has no noise
-        model.
+        If a path names no real tensor field, two paths overlap, the camera has no noise
+        model, or the reconstruction is not affine in the frames.
     GradientPathError
         If a field has no gradient path to the expected frames, so no image informs it.
 
@@ -236,8 +261,9 @@ def crlb(
     GradixWarning
         When the imaging element renders scalar PSFs above NA/n = 0.45, where quantitative
         bounds need the vectorial model (§5.3); when images leave the Pipeline's envelope;
-        when some images' Fisher information is singular; and when ``"auto"`` falls back to
-        central differences.
+        when some images' Fisher information is singular; when ``"auto"`` falls back to
+        central differences; and when the conjugate gradients reach ``iterations`` while the
+        information still grows.
 
     Notes
     -----
@@ -250,6 +276,16 @@ def crlb(
     complement ``S = Σ_b (D_b − C_bᵀ A_b⁻¹ C_b)`` of the per-image blocks
     ``F_b = [[A_b, C_b], [C_bᵀ, D_b]]``. The bound is local: it cannot see ambiguities such as
     the symmetry of an aberration-free PSF about focus.
+
+    With a reconstruction R, image b's information is that of z = R·y, whose mean is R·μ_b and
+    whose covariance is C_b = R·Σ_b·Rᵀ (Σ_b the pixel variances; real and imaginary parts of
+    complex outputs stacked): ``F_R = (RJ)ᵀ C⁺ (RJ) ≤ F``, with equality when R is invertible
+    on the Jacobian's span (ADR-44). Conjugate gradients solve C·X = RJ from X = 0, which
+    reaches the pseudo-inverse's solution because RJ lies in C's range; each product
+    C·x = R(Σ·Rᵀx) costs one application of R and one of its adjoint (reverse mode). The
+    result, ``XᵀRJ + (RJ)ᵀX − XᵀCX`` with X held fixed, is stationary in X, so its gradient
+    with respect to the Chain's tensors is exact without differentiating the solver. The
+    propagated noise is taken as Gaussian, and only the mean's dependence on θ is counted.
 
     References
     ----------
@@ -308,8 +344,12 @@ def crlb(
         bad = torch.nonzero(~flags).flatten().tolist()
         _warn(notes, f"images {bad} leave the envelope; their grids were planned for others")
     ordered = [f for f in fields if f.per_image] + [f for f in fields if not f.per_image]
+    linear = None if reconstruction is None else _linear_part(reconstruction)
     mu, columns, used = _jacobian(pipeline, base, ordered, method, notes)
-    info = fisher(torch.stack(columns, -1).double(), mu.double(), camera)  # [B, P, P]
+    if linear is None:
+        info = fisher(torch.stack(columns, -1).double(), mu.double(), camera)  # [B, P, P]
+    else:
+        info = _through(linear, mu, columns, camera, tolerance, iterations, notes)
     own = sum(f.count for f in ordered if f.per_image)
     covariance, singular = _covariance(info, own)
     if bool(singular.any()):
@@ -333,7 +373,194 @@ def crlb(
         units={f.path: _unit(f.spec) for f in fields},
         method=used,
         notes=tuple(notes),
+        reconstruction=None if reconstruction is None else _name(reconstruction),
     )
+
+
+def _name(reconstruction: object) -> str:
+    kind = type(reconstruction)
+    return getattr(reconstruction, "__name__", None) or kind.__name__
+
+
+def _linear_part(reconstruction: object) -> Callable[[Tensor], Tensor]:
+    """Return the affine map a bound is taken through."""
+    if isinstance(reconstruction, Reconstruction):
+        if not reconstruction.is_linear:
+            raise StructureError(
+                f"{type(reconstruction).__name__} is not affine in the frames: it calibrates on "
+                "each frame's median, so the bound cannot be taken through it",
+                fix="give it a fixed reference or background frame (from_chain renders one)",
+            )
+        return reconstruction.linear
+    if callable(reconstruction):
+        return cast("Callable[[Tensor], Tensor]", reconstruction)
+    raise StructureError(
+        f"reconstruction must be a gx.recon.Reconstruction or a callable, not "
+        f"{type(reconstruction).__name__}"
+    )
+
+
+def _dot(a: Tensor, b: Tensor) -> Tensor:
+    """Per-image real inner products ``[B]`` (complex values as stacked real and imaginary)."""
+    product = (a.conj() * b).real if a.is_complex() or b.is_complex() else a * b
+    return product.reshape(product.shape[0], -1).sum(1)
+
+
+def _through(
+    linear: Callable[[Tensor], Tensor],
+    mu: Tensor,
+    columns: list[Tensor],
+    camera: Camera,
+    tolerance: float,
+    iterations: int,
+    notes: list[str],
+) -> Tensor:
+    """Return each image's information through an affine map: ``F_R = (RJ)ᵀ(RΣRᵀ)⁺(RJ)``.
+
+    ``[B, P, P]`` in float64, differentiable through the frames' mean and variance. With
+    A = R·Σ^(1/2) and c = Σ^(−1/2)·J, F_R = ‖P c‖², P the projection onto A's row space:
+    CGLS on min_y ‖Aᵀy − c‖ finds it, and v = Rᵀy gives the stationary form in pixel space.
+    """
+    mu = mu.double()
+    variance = torch.clamp(camera.variance(mu), min=1e-12).expand_as(mu)
+    fixed = variance.detach()
+    offset = linear(torch.zeros_like(mu).detach()).detach()  # the affine map's constant
+
+    def apply(x: Tensor) -> Tensor:
+        return linear(x) - offset
+
+    with torch.enable_grad():
+        probe = torch.zeros_like(mu, requires_grad=True)
+        image = apply(probe)  # its graph gives the adjoint: Rᵀw = ∂⟨w, R·x⟩/∂x
+
+    def adjoint(w: Tensor) -> Tensor:
+        with torch.enable_grad():
+            product = (w.conj() * image).real if image.is_complex() else w * image
+            (out,) = torch.autograd.grad(product.sum(), probe, retain_graph=True)
+        return out
+
+    # Work in the basis that whitens the raw information: radius and index of a small sphere
+    # are nearly degenerate (1 − ρ² ~ 1e-12), and a tolerance relative to each column's own
+    # information resolves the degenerate direction only when that direction is a column.
+    # The basis is held fixed (a constant reparameterisation), so gradients stay exact.
+    whiten, unwhiten = _whitening(fisher(torch.stack(columns, -1).double(), mu, camera).detach())
+    shape = (-1,) + (1,) * (mu.dim() - 1)
+    stacked = torch.stack([column.double() for column in columns])  # [P, B, ...]
+    mixed = [
+        (stacked * whiten[:, :, k].transpose(0, 1).reshape(len(columns), *shape)).sum(0)
+        for k in range(len(columns))
+    ]
+    solutions: list[Tensor] = []
+    worst, steps = 0.0, 0
+    for column in mixed:
+        with torch.no_grad():
+            v, used, growth = _least_squares(
+                apply, adjoint, fixed, column.detach(), tolerance, iterations
+            )
+        solutions.append(v)
+        worst, steps = max(worst, growth), max(steps, used)
+    if steps >= iterations and worst > tolerance:
+        _warn(
+            notes,
+            f"the conjugate gradients stopped after {steps} iterations while the information "
+            f"still grew by {worst:.2g} per ten (tolerance {tolerance:g}): it is underestimated, "
+            "so the bound is conservative",
+            4,
+        )
+    else:
+        notes.append(f"through the reconstruction: conjugate gradients in {steps} iterations")
+    notes.append("the propagated noise is taken as Gaussian (sums over many pixels)")
+    # the stationary form in pixel space, F_ij = ⟨v_i, J_j⟩ + ⟨J_i, v_j⟩ − ⟨v_i, Σ·v_j⟩: exact
+    # gradients through J and Σ with v held fixed, and a lower bound for any v
+    count = len(mixed)
+    rows = []
+    for i in range(count):
+        row = [
+            _dot(solutions[i], mixed[j])
+            + _dot(mixed[i], solutions[j])
+            - _dot(solutions[i], variance * solutions[j])
+            for j in range(count)
+        ]
+        rows.append(torch.stack(row, -1))
+    info = torch.stack(rows, -2)  # [B, P, P] in the whitened basis
+    info = unwhiten @ ((info + info.transpose(-1, -2)) / 2.0) @ unwhiten
+    return (info + info.transpose(-1, -2)) / 2.0
+
+
+def _whitening(raw: Tensor) -> tuple[Tensor, Tensor]:
+    """Return ``F^(−1/2)`` and ``F^(1/2)`` of symmetric information matrices ``[B, P, P]``.
+
+    Directions without information (eigenvalues below 1e-14 of the largest) keep unit scale.
+    """
+    values, vectors = torch.linalg.eigh(raw)
+    top = values.amax(-1, keepdim=True).clamp_min(torch.finfo(raw.dtype).tiny)
+    safe = torch.where(values > 1e-14 * top, values, top)
+    root = safe.sqrt()
+    whiten = vectors @ torch.diag_embed(1.0 / root) @ vectors.transpose(-1, -2)
+    unwhiten = vectors @ torch.diag_embed(root) @ vectors.transpose(-1, -2)
+    return whiten, unwhiten
+
+
+def _least_squares(
+    apply: Callable[[Tensor], Tensor],
+    adjoint: Callable[[Tensor], Tensor],
+    variance: Tensor,
+    jacobian: Tensor,
+    tolerance: float,
+    iterations: int,
+) -> tuple[Tensor, int, float]:
+    """Project a Jacobian column onto what R keeps, by CGLS in whitened pixel space.
+
+    Solves min_y ‖Aᵀy − c‖ per image, with Aᵀ = Σ^(1/2)·Rᵀ and c = Σ^(−1/2)·J, from y = 0
+    (conjugate gradients on the normal equations R·Σ·Rᵀ·y = R·J, carried on the pixel-space
+    residual s = c − Aᵀy). The information ‖c‖² − ‖s‖² rises at every step; an image stops once
+    ten steps raise it by less than ``tolerance`` (relative), once a step would not shrink its
+    residual (rounding, on an extreme range of variances), or at ``iterations``. Returns
+    v = Rᵀy in pixel space, the iterations used and the worst relative growth over the last
+    ten steps.
+    """
+    sqrt = variance.sqrt()
+    shape = (jacobian.shape[0],) + (1,) * (jacobian.dim() - 1)
+    c = jacobian / sqrt
+    s = c.clone()
+    v = torch.zeros_like(c)
+    g = apply(sqrt * s)  # A·s, in R's output space
+    p = g.clone()
+    gamma = _dot(g, g)
+    ss = _dot(s, s)
+    total = ss.clone()  # ‖c‖², the raw information of the column
+    active = gamma > 0
+    recent: list[Tensor] = []
+    used = 0
+    for used in range(1, iterations + 1):  # noqa: B007 - the count is reported
+        back = adjoint(p)  # Rᵀp
+        q = sqrt * back  # Aᵀp
+        qq = _dot(q, q)
+        step = active & (qq > 0)
+        alpha = torch.where(step, gamma / torch.where(step, qq, 1.0), 0.0)
+        s_new = s - alpha.reshape(shape) * q
+        ss_new = _dot(s_new, s_new)
+        step = step & (ss_new <= ss)  # the residual must shrink
+        alpha = torch.where(step, alpha, 0.0)
+        s = torch.where(step.reshape(shape), s_new, s)
+        v = v + alpha.reshape(shape) * back
+        gain = torch.where(step, ss - ss_new, 0.0)
+        ss = torch.where(step, ss_new, ss)
+        recent = [*recent[-9:], gain]
+        information = total - ss
+        growth = torch.stack(recent).sum(0) / torch.where(information > 0, information, 1.0)
+        settled = (len(recent) == 10) & (growth <= tolerance)
+        g = apply(sqrt * s)
+        gamma_new = _dot(g, g)
+        active = step & ~settled & (gamma_new > 0)
+        if not bool(active.any()):
+            break
+        beta = torch.where(active, gamma_new / torch.where(gamma > 0, gamma, 1.0), 0.0)
+        p = torch.where(active.reshape(shape), g + beta.reshape(shape) * p, torch.zeros_like(p))
+        gamma = gamma_new
+    information = total - ss
+    growth = torch.stack(recent).sum(0) / torch.where(information > 0, information, 1.0)
+    return v, used, float(growth.max()) if growth.numel() else 0.0
 
 
 def _unit(spec: FieldSpec) -> str:

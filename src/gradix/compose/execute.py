@@ -340,7 +340,9 @@ def _waves(chain: Chain, statics: Mapping[str, Static]) -> PlaneWaves:
     light = chain.light
     if not isinstance(light, Element):  # pragma: no cover - checked by check_supported
         raise PlanError("no light source")
-    waves = light.forward(static=statics.get("light", Static()))
+    # shaped light reads the medium it is defined in (its aplanatic factor needs the index)
+    inputs = (chain.environment,) if getattr(light, "reads_medium", False) else ()
+    waves = light.forward(*inputs, static=statics.get("light", Static()))
     if not isinstance(waves, PlaneWaves):
         raise StructureError(f"{type(light).__name__} returned {type(waves).__name__}")
     return waves

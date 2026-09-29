@@ -12,6 +12,7 @@ from gradix import register
 from gradix._core.carriers import PlaneWaves
 from gradix._core.contract import Capabilities, Element, Slot, Static
 from gradix._core.errors import StructureError
+from gradix._core.precision import result_dtype
 from gradix.conventions import safe_sqrt
 from gradix.schema.fields import field, knob
 from gradix.schema.layout import canonical
@@ -100,7 +101,10 @@ class ReferenceBeam(Element[PlaneWaves]):
             raise StructureError("ReferenceBeam takes the illumination's PlaneWaves")
         light = inputs[0]
         spec = self.schema()
-        dtype, device = light.wavelengths.dtype, light.wavelengths.device
+        # the reference's own float64 values keep it in float64 under float32 light
+        values = (self.irradiance, self.phase, self.angle)
+        dtype = result_dtype(light.wavelengths, *values, default=light.wavelengths.dtype)
+        device = light.wavelengths.device
         irr = canonical(self.irradiance, spec["irradiance"], dtype=dtype, device=device)
         phase = canonical(self.phase, spec["phase"], dtype=dtype, device=device)  # [B|1, A|1]
         amp = safe_sqrt(irr).reshape(-1, 1) * torch.ones_like(phase)
@@ -112,7 +116,8 @@ class ReferenceBeam(Element[PlaneWaves]):
         else:
             angle = canonical(self.angle, spec["angle"], dtype=dtype, device=device)  # [B|1, 2]
             u = torch.sin(angle)[:, None, None, None, :]
-        return PlaneWaves(amplitude=amplitude, u=u, wavelengths=light.wavelengths, z0=0.0, travel=1)
+        wavelengths = light.wavelengths.to(dtype)
+        return PlaneWaves(amplitude=amplitude, u=u, wavelengths=wavelengths, z0=0.0, travel=1)
 
     def __call__(
         self, *inputs: object, grid: object = None, static: Static | None = None

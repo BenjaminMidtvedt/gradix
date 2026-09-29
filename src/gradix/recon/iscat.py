@@ -51,6 +51,17 @@ class ISCATContrast(Reconstruction):
         empty = without_scatterers(chain)
         return cls(reference=empty(outputs=("expected",))["expected"].detach())
 
+    @property
+    def is_linear(self) -> bool:
+        """Whether the reconstruction is affine: only with a fixed reference.
+
+        Returns
+        -------
+        bool
+            False when the reference is estimated from each frame (its median).
+        """
+        return self.reference is not None
+
     def linear(self, frames: Tensor) -> Tensor:
         """Return the contrast (affine in the frames for a given reference).
 

@@ -26,6 +26,17 @@ class Reconstruction:
     parameters, with a ``from_chain`` constructor where the Chain holds them.
     """
 
+    @property
+    def is_linear(self) -> bool:
+        """Whether :meth:`linear` is affine in the frames, as :func:`gradix.crlb` requires.
+
+        Returns
+        -------
+        bool
+            True unless a calibration is estimated from the frames themselves (a median).
+        """
+        return True
+
     def linear(self, frames: Tensor) -> Tensor:
         """Return the linear (affine) part of the reconstruction.
 

@@ -72,6 +72,9 @@ __all__ = ["Coherent", "CoherentStatic"]
 _PAD = 1.03125
 """The pupil grid extends this far beyond NA, so the soft aperture edge fits inside it."""
 
+_WORKING_SET = 2**24
+"""Elements per Mie tensor ``[B, A, M, J, L, N, K]``: shaped light's waves go in chunks."""
+
 
 @dataclasses.dataclass(frozen=True)
 class CoherentStatic(Static):
@@ -512,7 +515,9 @@ class Coherent(Element[Irradiance]):
             default=1,
         )  # autograd keeps every order's pupil and field
         transform = 16 * pupil * pupil + 24 * height * width + 16 * pupil * max(height, width)
-        per_sphere = 112 * pupil * pupil + orders * transform
+        light = desc.nodes.get(desc.part("light")) or desc.nodes.get("light")
+        waves = int(getattr(light, "waves", 1) or 1)  # shaped light: autograd keeps every wave
+        per_sphere = 112 * pupil * pupil * waves + orders * transform
         field = 32 * height * width * orders
         return int(desc.frames * desc.bins * (spheres * per_sphere + field))
 
@@ -1041,42 +1046,63 @@ class Coherent(Element[Irradiance]):
         uy, ux = torch.meshgrid(u, u, indexing="ij")
         ux, uy = ux.reshape(-1), uy.reshape(-1)  # [K = P·P]
         u2 = ux * ux + uy * uy
-        # ---- geometry in fp64, layout [B|1, A|1, M, J, L|1, K] ----
-        n64 = o.n.to(torch.float64).reshape(-1, 1, 1, 1, 1, 1)
-        u_in = waves.u.to(device=device, dtype=torch.float64)  # [B|1, A|1, M, J, 2]
-        uix = u_in[..., 0][..., None, None]  # [B|1, A|1, M, J, 1, 1]
-        uiy = u_in[..., 1][..., None, None]
-        w = safe_sqrt((n64 * n64 - u2).to(torch.complex128))  # pupil directions, toward +z
-        w_in = safe_sqrt((n64 * n64 - uix * uix - uiy * uiy).to(torch.complex128))
-        mu = (ux * uix + uy * uiy + waves.travel * w * w_in) / (n64 * n64)  # cos Θ
-        dx, dy = ux - uix, uy - uiy  # azimuth of the scattering plane about the incidence
-        r2 = dx * dx + dy * dy
-        safe_r2 = torch.where(r2 > 0, r2, torch.ones_like(r2))
-        cos2 = torch.where(r2 > 0, dx * dx / safe_r2, torch.ones_like(r2))  # x analyser
+        # ---- per-sphere Mie coefficients with the order weights, [B|1, A|1, 1, 1, L, N, n] ----
         terms = a_n.shape[-1]
-        pi, tau = mie.angular(mu, terms)  # [B|1, A|1, M, J, 1, K, n]
-        # ---- S₁, S₂ per sphere: [B, A, M, J, L, N, K] by matrix products over the orders ----
         order = torch.arange(1, terms + 1, dtype=torch.float64, device=device)
         c = ((2.0 * order + 1.0) / (order * (order + 1.0))).to(cdtype)
         a8 = (a_n.to(device=device, dtype=cdtype) * c).permute(0, 1, 3, 2, 4)  # [B, A, L, N, n]
         b8 = (b_n.to(device=device, dtype=cdtype) * c).permute(0, 1, 3, 2, 4)
-        a8, b8 = a8[:, :, None, None], b8[:, :, None, None]  # [B|1, A|1, 1, 1, L, N, n]
-        pi_t = pi.to(cdtype).transpose(-1, -2)  # [B|1, A|1, M, J, 1, n, K]
-        tau_t = tau.to(cdtype).transpose(-1, -2)
-        s1 = a8 @ pi_t + b8 @ tau_t  # [B, A, M, J, L, N, K]
-        s2 = a8 @ tau_t + b8 @ pi_t
-        cos2 = cos2.to(dtype)[..., None, :]  # [B|1, A|1, M, J, 1, 1, K]
+        a8, b8 = a8[:, :, None, None], b8[:, :, None, None]
         c_s, c_p, kz_pair = self._collection(u2, medium, o)  # [B|1, 1, 1, 1, L, 1, K]
-        s_par = c_p.to(cdtype) * s2 * cos2 + c_s.to(cdtype) * s1 * (1.0 - cos2)
         k_m = 2.0 * math.pi * o.n.reshape(-1, 1) / o.lam  # [B|1, L]: per-image index or bins
         k_m = k_m.reshape(k_m.shape[0], 1, 1, 1, k_m.shape[1], 1, 1)  # [B|1, 1, 1, 1, L, 1, 1]
-        f = (1j * s_par) / k_m  # scattering amplitude f = iS/k, µm
-        # ---- incident waves at the spheres, each on its own: [B, A, M, J, L, N, 1] ----
-        incident = self._incident(waves, pos, o).to(cdtype)
+        presence = None
         if spectra.presence is not None:
             presence = spectra.presence.to(device=device, dtype=dtype)  # [B|1, A|1, N]
-            incident = incident * presence[:, :, None, None, None, :]
-        strength = (f * incident[..., None]).sum(3)  # coherent sum over J: [B, A, M, L, N, K]
+
+        def strength_of(part: PlaneWaves) -> Tensor:  # Σ over these waves: [B, A, M, L, N, K]
+            # geometry in fp64, layout [B|1, A|1, M, J, L|1, K]
+            n64 = o.n.to(torch.float64).reshape(-1, 1, 1, 1, 1, 1)
+            u_in = part.u.to(device=device, dtype=torch.float64)  # [B|1, A|1, M, J, 2]
+            uix = u_in[..., 0][..., None, None]  # [B|1, A|1, M, J, 1, 1]
+            uiy = u_in[..., 1][..., None, None]
+            w = safe_sqrt((n64 * n64 - u2).to(torch.complex128))  # pupil directions, toward +z
+            w_in = safe_sqrt((n64 * n64 - uix * uix - uiy * uiy).to(torch.complex128))
+            mu = (ux * uix + uy * uiy + part.travel * w * w_in) / (n64 * n64)  # cos Θ
+            dx, dy = ux - uix, uy - uiy  # azimuth of the scattering plane about the incidence
+            r2 = dx * dx + dy * dy
+            safe_r2 = torch.where(r2 > 0, r2, torch.ones_like(r2))
+            cos2 = torch.where(r2 > 0, dx * dx / safe_r2, torch.ones_like(r2))  # x analyser
+            pi, tau = mie.angular(mu, terms)  # [B|1, A|1, M, J, 1, K, n]
+            # S₁, S₂ per sphere, [B, A, M, J, L, N, K], by matrix products over the orders
+            pi_t = pi.to(cdtype).transpose(-1, -2)  # [B|1, A|1, M, J, 1, n, K]
+            tau_t = tau.to(cdtype).transpose(-1, -2)
+            s1 = a8 @ pi_t + b8 @ tau_t
+            s2 = a8 @ tau_t + b8 @ pi_t
+            cos2 = cos2.to(dtype)[..., None, :]  # [B|1, A|1, M, J, 1, 1, K]
+            s_par = c_p.to(cdtype) * s2 * cos2 + c_s.to(cdtype) * s1 * (1.0 - cos2)
+            f = (1j * s_par) / k_m  # scattering amplitude f = iS/k, µm
+            # the incident waves at the spheres, each on its own: [B, A, M, J, L, N]
+            incident = self._incident(part, pos, o).to(cdtype)
+            if presence is not None:
+                incident = incident * presence[:, :, None, None, None, :]
+            return (f * incident[..., None]).sum(3)  # coherent sum over the waves
+
+        # shaped light brings many waves: sum them in chunks that bound the working set
+        waves_count = waves.u.shape[3]
+        others = math.prod(a8.shape[:2]) * waves.u.shape[2] * a8.shape[4] * count * samples**2
+        chunk = max(1, min(waves_count, _WORKING_SET // max(others, 1)))
+        strength: Tensor | None = None
+        for j0 in range(0, waves_count, chunk):
+            part = waves
+            if chunk < waves_count:
+                part = waves.replace(
+                    amplitude=waves.amplitude[:, :, :, j0 : j0 + chunk],
+                    u=waves.u[:, :, :, j0 : j0 + chunk],
+                )
+            term = strength_of(part)
+            strength = term if strength is None else strength + term
+        assert strength is not None
         strength = strength.reshape(*strength.shape[:-1], samples, samples)
         # ---- pupil weights, layout [B, A, 1, L, N, P, P] ----
         seven = (-1, 1, 1, 1, 1, 1, 1)
