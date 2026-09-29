@@ -202,6 +202,17 @@ def _module_parameters(tree: object) -> list[Tensor]:
     return out
 
 
+def _grad_mode(chain: Chain) -> contextlib.AbstractContextManager[object]:
+    """Record graphs only when a tensor or module parameter of the Chain requires gradients.
+
+    ``torch.no_grad`` does not stop forward-mode AD, so ``torch.func.jvp`` works either way.
+    """
+    needs_grad = any(
+        isinstance(v, Tensor) and v.requires_grad for _, _, v in iter_leaves(chain)
+    ) or any(p.requires_grad for p in _module_parameters(chain))
+    return contextlib.nullcontext() if needs_grad else torch.no_grad()
+
+
 def _is_declared(path: str, inputs: Sequence[str]) -> bool:
     return any(path == d or path.startswith(f"{d}.") or d.startswith(f"{path}.") for d in inputs)
 
@@ -731,12 +742,8 @@ class Pipeline:
             raise EnvelopeError(
                 f"images {bad} leave the envelope", fix="grow the envelope, or use gx.render"
             )
-        needs_grad = any(
-            isinstance(v, Tensor) and v.requires_grad for _, _, v in iter_leaves(chain)
-        ) or any(p.requires_grad for p in _module_parameters(chain))
-        mode = contextlib.nullcontext() if needs_grad else torch.no_grad()
-        with mode:
-            values = self._run_chunked(chain, batch, key)
+        with _grad_mode(chain):
+            values = self._run_chunked(chain, batch, key, self.outputs)
         meta = {
             "hash": self.hash,
             "chunks": dict(self.memory.chunks),
@@ -746,13 +753,32 @@ class Pipeline:
         }
         return Output(values, meta)
 
-    def _run_chunked(self, chain: Chain, batch: int, key: int | Tensor | None) -> dict[str, Tensor]:
+    def _expected(self, chain: Chain) -> tuple[Tensor, Tensor]:
+        """Return a Chain's expected frames ``[B, …]`` and its envelope flags ``[B]``.
+
+        Whatever the Pipeline's outputs, this renders only the expected frames: no key, no
+        noise and no labels. The frames keep their graphs, in reverse mode and in forward mode
+        alike, which is what :func:`gradix.crlb` differentiates.
+        """
+        batch, _counts = self._conform(chain)
+        flags = in_envelope(self.envelope, chain, batch)
+        with _grad_mode(chain):
+            values = self._run_chunked(chain, batch, None, {"expected": Expected()})
+        return values["expected"], flags
+
+    def _run_chunked(
+        self,
+        chain: Chain,
+        batch: int,
+        key: int | Tensor | None,
+        outputs: Mapping[str, OutputSpec],
+    ) -> dict[str, Tensor]:
         """Render in batch chunks; the noise is drawn once, so chunking never changes results."""
         statics = self.sampling.statics
         chunk = int(self.memory.chunks.get("batch", batch))
         if chunk >= batch:
-            return execute.run(chain, statics, key=key, outputs=self.outputs, batch=batch)
-        wants_frames = any(isinstance(s, (Image, Expected)) for s in self.outputs.values())
+            return execute.run(chain, statics, key=key, outputs=outputs, batch=batch)
+        wants_frames = any(isinstance(s, (Image, Expected)) for s in outputs.values())
         frames: list[Tensor] = []
         label_parts: list[dict[str, Tensor]] = []
         for start in range(0, batch, chunk):
@@ -761,8 +787,8 @@ class Pipeline:
             if wants_frames:
                 mu = execute.expected(sub, statics)
                 frames.append(mu.expand(size, *mu.shape[1:]) if mu.shape[0] != size else mu)
-            label_parts.append(execute.labels(sub, self.outputs, size))
+            label_parts.append(execute.labels(sub, outputs, size))
         mu_all = torch.cat(frames, 0) if frames else None
-        values = execute.finish(chain, mu_all, key, self.outputs)
+        values = execute.finish(chain, mu_all, key, outputs)
         values.update(execute.concat(label_parts))
         return execute.fresh(values, batch, inputs=chain)

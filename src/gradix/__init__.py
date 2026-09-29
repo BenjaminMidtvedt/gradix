@@ -92,7 +92,7 @@ from gradix._core.errors import (
 )
 from gradix._core.grid import FreqGrid, Grid2D, PatchGrid, PupilGrid, VolumeGrid
 from gradix._version import __version__
-from gradix.api import Plan, plan, render
+from gradix.api import CRLB, Plan, crlb, plan, render
 from gradix.compose import Chain, Output, Pipeline, SamplingPlan
 from gradix.containers import Microscope, Sample
 from gradix.detect import Camera
@@ -122,6 +122,7 @@ from gradix.schema.stack import pad, stack
 from gradix.schema.units import from_si, to_si
 
 __all__ = [
+    "CRLB",
     "AcqIndex",
     "BindingError",
     "Boxes",
@@ -187,6 +188,7 @@ __all__ = [
     "child",
     "conventions",
     "coords",
+    "crlb",
     "detect",
     "dipole",
     "env",
