@@ -246,6 +246,35 @@ class PlaneWaves(Carrier):
         StructureError
             If ``n`` is 1-d (ambiguous: per image or per wavelength).
         """
+        amp, phasor = self._amplitudes_and_phasors(points, n)
+        out = torch.einsum("bamjlp,bamjln->bamlpn", amp, phasor)
+        return out.to(self.amplitude.dtype)
+
+    def at_waves(self, points: Tensor, n: Tensor | float) -> Tensor:
+        """Evaluate each coherent wave separately at points (no sum over J).
+
+        Direction-dependent scatterers (Mie) need every incident wave on its own, because the
+        scattering angle differs from wave to wave.
+
+        Parameters
+        ----------
+        points : Tensor
+            ``[B|1, A|1, N, 3]`` positions in µm.
+        n : Tensor or float
+            Refractive index of the medium, a scalar or ``[B|1, L]``.
+
+        Returns
+        -------
+        Tensor
+            Complex ``[B, A, M, J, L, P, N]`` in the amplitude's complex dtype; summing over J
+            gives :meth:`at`.
+        """
+        amp, phasor = self._amplitudes_and_phasors(points, n)
+        out = amp[..., None] * phasor[..., None, :]  # [B, A, M, J, L, P, N]
+        return out.to(self.amplitude.dtype)
+
+    def _amplitudes_and_phasors(self, points: Tensor, n: Tensor | float) -> tuple[Tensor, Tensor]:
+        """Return fp64 amplitudes ``[B|1, A|1, M, J, L, P]`` and phasors ``[B, A, M, J, L, N]``."""
         device = points.device  # waves built from scalar parameters live on the CPU
         wl = self.wavelengths.to(device=device, dtype=torch.float64)
         k0 = (2.0 * math.pi / wl)[:, None, None, None, :, None]  # [B,1,1,1,L,1]
@@ -268,8 +297,7 @@ class PlaneWaves(Carrier):
         axial = self.travel * k0 * uz * (z - z0)
         phasor = torch.exp(1j * (lateral + axial))  # [B,A,M,J,L,N]
         amp = self.amplitude.to(device=device, dtype=torch.complex128)
-        out = torch.einsum("bamjlp,bamjln->bamlpn", amp, phasor)
-        return out.to(self.amplitude.dtype)
+        return amp, phasor
 
 
 @runtime_checkable

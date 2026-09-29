@@ -8,8 +8,10 @@ envelope). Given the same statics, the two levels are therefore bit-identical by
 The executor runs the emission path: emitter populations are lowered to what the imaging
 element accepts (an :class:`~gradix.EmitterSet` or an :class:`~gradix.EmitterDensity`),
 excited when the Chain has light and an excitation element, rendered into an
-:class:`~gradix.Irradiance` and detected by the camera. Coherent paths (scatterers, stages,
-references) arrive with M3 and extend :func:`irradiance`.
+:class:`~gradix.Irradiance` and detected by the camera. The coherent path (M3a) runs the light
+source, lowers every scatterer population to its spectra (:class:`~gradix.ObjectSpectra`) and
+images them with the plane waves through a coherent imaging element; optical stages and
+references join it in later M3a phases.
 
 A render has three steps, so a chunked Pipeline can run the deterministic ones per chunk and
 draw the noise once for the whole batch (identical results with batch or image keys):
@@ -24,12 +26,19 @@ from collections.abc import Mapping
 import torch
 from torch import Tensor
 
-from gradix._core.carriers import EmitterDensity, EmitterSet, Irradiance, PlaneWaves
+from gradix._core.carriers import (
+    EmitterDensity,
+    EmitterSet,
+    Irradiance,
+    ObjectSpectra,
+    PlaneWaves,
+)
 from gradix._core.contract import Description, Element, Static, report
 from gradix._core.envelope import envelope_of
 from gradix._core.errors import PlanError, StructureError
 from gradix.compose.chain import Chain
 from gradix.compose.outputs import Expected, Image, OutputSpec
+from gradix.compose.outputs import Field as FieldOutput
 from gradix.compose.wiring import check_wiring
 from gradix.detect.camera import Camera, CameraStatic
 from gradix.labels.positions import Label
@@ -46,9 +55,11 @@ from gradix.tree import replace as tree_replace
 __all__ = [
     "acquired",
     "check_supported",
+    "coherent",
     "concat",
     "eager_statics",
     "expected",
+    "fields",
     "finish",
     "fresh",
     "irradiance",
@@ -71,10 +82,17 @@ def check_supported(chain: Chain) -> None:
         On coherent slots, a missing imaging element or camera, or an imaging element that does
         not consume emitters.
     """
-    if chain.scatterers or chain.illumination_optics or chain.detection_optics or chain.references:
-        msg = "coherent Chains (scatterers, stages, references) are not available yet (M3)"
-        fix = "call the coherent elements directly: gx.imaging.Coherent(...)(spectra, waves, env)"
-        raise PlanError(msg, fix=fix)
+    if chain.illumination_optics or chain.detection_optics or chain.references:
+        msg = "optical stages and references are not available yet (later M3a phases)"
+        raise PlanError(msg, fix="render the Chain without them for now")
+    if coherent(chain):
+        _check_coherent(chain)
+        return
+    if chain.scatterers:
+        raise PlanError(
+            "the Chain has scatterers but its imaging element is not coherent",
+            fix="use gx.imaging.Coherent(objective, camera)",
+        )
     if chain.excite is not None:
         if not isinstance(chain.excite, Element) or PlaneWaves not in chain.excite.caps.accepts:
             raise PlanError("excite= must be a transduction element such as gx.excite.Linear()")
@@ -111,6 +129,55 @@ def check_supported(chain: Chain) -> None:
         raise PlanError(
             "the Chain has no camera", fix="add camera=... or an imaging element with one"
         )
+    if chain.environment is None:
+        raise PlanError("the Chain has no environment", fix="add environment=gx.env.Homogeneous(n)")
+    check_wiring(chain)
+    acquisition = chain.acquisition
+    if isinstance(acquisition, Acquisition):
+        _check_drives(acquisition, chain)
+
+
+def coherent(chain: Chain) -> bool:
+    """Return whether a Chain renders scattered light: its imaging element takes spectra.
+
+    Parameters
+    ----------
+    chain : Chain
+        The Chain.
+
+    Returns
+    -------
+    bool
+        True when the imaging element accepts :class:`~gradix.ObjectSpectra`.
+    """
+    imaging = chain.imaging
+    return isinstance(imaging, Element) and ObjectSpectra in imaging.caps.accepts
+
+
+def _makes(element: Element, carrier: type) -> bool:
+    produced = element.caps.produces
+    return any(
+        issubclass(p, carrier) for p in (produced if isinstance(produced, tuple) else (produced,))
+    )
+
+
+def _check_coherent(chain: Chain) -> None:
+    """Raise :class:`~gradix._core.errors.PlanError` for coherent Chains M3a cannot render."""
+    if chain.emitters:
+        msg = "a coherent Chain cannot also hold emitters (fluorescence and scattering together)"
+        raise PlanError(msg, fix="render emitters and scatterers in separate Chains")
+    if chain.excite is not None:
+        raise PlanError("a coherent Chain has no excitation element", fix="drop excite=")
+    light = chain.light
+    if not isinstance(light, Element) or not _makes(light, PlaneWaves):
+        fix = "add light=gx.light.PlaneWave(λ)"
+        raise PlanError("a coherent Chain needs plane-wave light", fix=fix)
+    for name, element in chain.scatterers.items():
+        if not isinstance(element, Element) or not _makes(element, ObjectSpectra):
+            msg = f"scatterers[{name!r}] must be an interaction element such as gx.interact.Mie"
+            raise PlanError(msg, fix=f"scatterers={{{name!r}: gx.interact.Mie(spheres)}}")
+    if not isinstance(chain.camera, Camera):
+        raise PlanError("the Chain has no camera", fix="give the imaging element a camera")
     if chain.environment is None:
         raise PlanError("the Chain has no environment", fix="add environment=gx.env.Homogeneous(n)")
     check_wiring(chain)
@@ -214,6 +281,8 @@ def eager_statics(chain: Chain) -> dict[str, Static]:
     imaging = chain.imaging
     if not isinstance(imaging, Element):  # pragma: no cover - checked above
         raise PlanError("no imaging element")
+    if coherent(chain):
+        return _coherent_statics(chain, imaging)
     if any(isinstance(p, Solid) for p in chain.emitters.values()):
         # solids are rasterised onto the grid the element chooses (ADR-41): configure first,
         # on the populations' own envelope (no headroom), as a Pipeline does on its envelope
@@ -227,6 +296,42 @@ def eager_statics(chain: Chain) -> dict[str, Static]:
         report(imaging.validity(desc, envelope), "warn")
         return {"imaging": imaging.configure(desc, envelope)}
     return {"imaging": imaging.eager_static(_emission(chain), chain.environment)}
+
+
+def _coherent_statics(chain: Chain, imaging: Element) -> dict[str, Static]:
+    """Configure a coherent Chain's scatterers and imaging element on their own inputs."""
+    waves = _waves(chain, {})
+    statics: dict[str, Static] = {}
+    for name, element in sorted(chain.scatterers.items()):
+        statics[f"scatterers.{name}"] = element.eager_static(waves, chain.environment)
+    contributions = _contributions(chain, waves, statics)
+    statics["imaging"] = imaging.eager_static(contributions, waves, chain.environment)
+    return statics
+
+
+def _waves(chain: Chain, statics: Mapping[str, Static]) -> PlaneWaves:
+    light = chain.light
+    if not isinstance(light, Element):  # pragma: no cover - checked by check_supported
+        raise PlanError("no light source")
+    waves = light.forward(static=statics.get("light", Static()))
+    if not isinstance(waves, PlaneWaves):
+        raise StructureError(f"{type(light).__name__} returned {type(waves).__name__}")
+    return waves
+
+
+def _contributions(
+    chain: Chain, waves: PlaneWaves, statics: Mapping[str, Static]
+) -> tuple[ObjectSpectra, ...]:
+    """Lower every scatterer population to its spectra (in sorted name order)."""
+    out: list[ObjectSpectra] = []
+    for name, element in sorted(chain.scatterers.items()):
+        static = statics.get(f"scatterers.{name}", Static())
+        for contribution in element.forward(waves, chain.environment, static=static):
+            if not isinstance(contribution, ObjectSpectra):
+                kind = type(contribution).__name__
+                raise StructureError(f"scatterers[{name!r}] returned {kind}, not ObjectSpectra")
+            out.append(contribution)
+    return tuple(out)
 
 
 def _excited(chain: Chain, statics: Mapping[str, Static]) -> EmitterSet | EmitterDensity:
@@ -263,7 +368,16 @@ def irradiance(chain: Chain, statics: Mapping[str, Static]) -> Irradiance:
     imaging = chain.imaging
     if not isinstance(imaging, Element):  # pragma: no cover - checked by check_supported
         raise PlanError("no imaging element")
-    out = imaging.forward(_excited(chain, statics), chain.environment, static=statics["imaging"])
+    if coherent(chain):
+        waves = _waves(chain, statics)
+        contributions = _contributions(chain, waves, statics)
+        out = imaging.forward(contributions, waves, chain.environment, static=statics["imaging"])
+        if isinstance(out, Irradiance):  # the frames the acquisition declares (a focus stack)
+            out = out.replace(acq=chain.acq_index())
+    else:
+        out = imaging.forward(
+            _excited(chain, statics), chain.environment, static=statics["imaging"]
+        )
     if not isinstance(out, Irradiance):
         raise StructureError(
             f"{type(imaging).__name__} returned {type(out).__name__}, not Irradiance"
@@ -339,6 +453,86 @@ def labels(
         for suffix, tensor in rendered.items():
             values[f"{name}.{suffix}" if suffix else name] = tensor
     return _expand(values, batch)
+
+
+def fields(
+    chain: Chain,
+    statics: Mapping[str, Static],
+    outputs: Mapping[str, OutputSpec],
+    batch: int | None = None,
+) -> dict[str, Tensor]:
+    """Render the field outputs (:class:`~gradix.out.Field`) of a coherent Chain.
+
+    Parameters
+    ----------
+    chain : Chain
+        The Chain.
+    statics : Mapping[str, Static]
+        Static configurations by element path.
+    outputs : Mapping[str, OutputSpec]
+        Output specs by name; specs other than fields are skipped.
+    batch : int, optional
+        Expand fields that do not vary over images to this many rows.
+
+    Returns
+    -------
+    dict of str to Tensor
+        Complex ``[B, A, H, W]`` (or its ``layout``) by output name.
+
+    Raises
+    ------
+    StructureError
+        If the Chain is not coherent, has several modes or bins, or normalises by a background
+        that does not reach the camera.
+    """
+    specs = {name: spec for name, spec in outputs.items() if isinstance(spec, FieldOutput)}
+    if not specs:
+        return {}
+    if not coherent(chain):
+        msg = "field outputs need a coherent Chain (scatterers and gx.imaging.Coherent)"
+        raise StructureError(msg)
+    chain = acquired(chain)
+    imaging = chain.imaging
+    image_field = getattr(imaging, "image_field", None)
+    if not callable(image_field):
+        raise StructureError(f"{type(imaging).__name__} does not produce an image field")
+    static = statics["imaging"]
+    waves = _waves(chain, statics)
+    contributions = _contributions(chain, waves, statics)
+    total = image_field(contributions, waves, chain.environment, static=static)
+    if total.shape[2] != 1 or total.shape[3] != 1:
+        msg = "a field output needs one incoherent mode and one wavelength bin"
+        raise StructureError(msg, fix="a partially coherent image has no single field")
+    s = int(getattr(static, "oversample", 1))
+
+    def pool(field: Tensor) -> Tensor:  # complex average over each camera pixel
+        f = field[:, :, 0, 0]
+        b, a, hs, ws = f.shape
+        return f.reshape(b, a, hs // s, s, ws // s, s).mean((3, 5))
+
+    field = pool(total)
+    background: Tensor | None = None
+    out: dict[str, Tensor] = {}
+    for name, spec in specs.items():
+        value = field
+        if spec.normalize == "background":
+            if background is None:
+                background = pool(image_field((), waves, chain.environment, static=static))
+            if bool((background.abs() == 0).any()):
+                msg = "no background reaches the camera (epi or darkfield illumination)"
+                raise StructureError(msg, fix="use gx.out.Field(normalize='incident')")
+            value = field / background
+        elif spec.normalize == "incident":
+            amplitude = waves.amplitude[:, :, 0, 0, 0, 0].to(field.dtype)  # [B|1, A|1]
+            value = field / amplitude[:, :, None, None]
+        if spec.layout == "re_im":
+            value = torch.view_as_real(value)
+        elif spec.layout == "phase":
+            value = torch.angle(value)
+        elif spec.layout == "amplitude":
+            value = value.abs()
+        out[name] = value
+    return _expand(out, batch)
 
 
 def _rendered_views(chain: Chain) -> dict[str, EmitterSet]:
@@ -487,6 +681,7 @@ def run(
     mu = expected(chain, statics) if wants_frames else None
     values = finish(chain, mu, key, outputs)
     values.update(labels(chain, outputs))
+    values.update(fields(chain, statics, outputs))
     return fresh(values, batch, inputs=chain)
 
 

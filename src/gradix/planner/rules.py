@@ -14,9 +14,10 @@ directly; a bare value that no rule knows (``"tmatrix"``) is looked up as ``"<fa
 from __future__ import annotations
 
 import dataclasses
+import math
 from collections.abc import Callable, Mapping
 
-from gradix._core.carriers import EmitterDensity, EmitterSet
+from gradix._core.carriers import EmitterDensity, EmitterSet, PlaneWaves
 from gradix._core.contract import Element
 from gradix._core.envelope import Envelope
 from gradix._core.errors import PlanError, RegistryError
@@ -65,11 +66,29 @@ class RouteContext:
 
 
 Rule = str | Callable[[RouteContext], str]
+
+DIPOLE_X_MAX = 0.75
+"""Largest size parameter k·r for which ``spheres="auto"`` takes the Mie-dressed dipole (within
+5 % of Mie over all angles for dielectrics, §5.2)."""
+
+
+def _sphere_auto(ctx: RouteContext) -> str:
+    """Choose Mie-dressed dipoles for small spheres and Mie otherwise, from the envelope."""
+    radius = ctx.envelope.range(f"{ctx.name}.radius")
+    wavelength = ctx.envelope.range("light.wavelength")
+    index = ctx.envelope.range("environment.n")
+    if radius is None or wavelength is None or index is None:
+        return "interact.mie"
+    x_max = 2.0 * math.pi * index[1] * radius[1] / wavelength[0]
+    return "interact.dipole" if x_max <= DIPOLE_X_MAX else "interact.mie"
+
+
 """A rule's result: a registry name, or a callable choosing one from the context."""
 
 RULES: dict[tuple[str, str, str, str], Rule] = {
     ("point", "emission", "emitters", "gaussian"): "emit.gaussian",
     ("point", "emission", "emitters", "pupil"): "emit.pupil_mft",
+    ("sphere", "coherent", "spheres", "auto"): _sphere_auto,
     ("sphere", "coherent", "spheres", "dipole"): "interact.dipole",
     ("sphere", "coherent", "spheres", "mie"): "interact.mie",
     ("sphere", "coherent", "spheres", "born"): "interact.born_ff",
@@ -101,6 +120,7 @@ FAMILIES: dict[str, str] = {"emission": "emit", "coherent": "interact"}
 """Registry family of the elements that render each contrast; bare knob values resolve in it."""
 
 _ACCEPTS: dict[tuple[str, str] | str, type] = {
+    "coherent": PlaneWaves,
     "emission": EmitterSet,
     ("voxels", "emission"): EmitterDensity,
     ("labeled", "emission"): EmitterDensity,
@@ -125,10 +145,26 @@ def _build_emit(
         ) from None
 
 
+def _build_interact(
+    cls: type[Element], parts: Mapping[str, object], knobs: Mapping[str, object]
+) -> Element:
+    """Build an interaction element around its population (``parts["objects"]``)."""
+    schema = cls.schema()
+    kwargs = {k: v for k, v in knobs.items() if k in schema}
+    kwargs[getattr(cls, "population_field", "objects")] = parts["objects"]
+    try:
+        return cls(**kwargs)
+    except TypeError as err:
+        msg = f"cannot build {cls.__name__} around its population: {err}"
+        raise PlanError(msg, fix="name the population field with population_field") from None
+
+
 BUILDERS: dict[
     str, Callable[[type[Element], Mapping[str, object], Mapping[str, object]], Element]
 ] = {
     "emit": _build_emit,
+    "coherent": _build_emit,
+    "interact": _build_interact,
 }
 """How the planner constructs an element of each registry family from the microscope's parts."""
 
@@ -189,7 +225,7 @@ def _check_element(name: str, choice: str, pop: ObjectSet | Voxels) -> None:
             pin = {name: "emit.gaussian"}
             fix = f"use fidelity='draft' (Gaussian sprites) or pin methods={pin!r}"
         else:
-            fix = "coherent paths arrive with M3"
+            fix = "Born, projection and multislice arrive with M3 and M4; Mie is available"
         raise PlanError(msg, fix=fix) from None
     kind, contrast = routing(pop)
     carrier = _ACCEPTS.get((kind, contrast), _ACCEPTS.get(contrast))

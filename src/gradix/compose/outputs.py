@@ -18,7 +18,17 @@ from gradix._core.errors import StructureError
 from gradix._core.names import check_name
 from gradix.schema.base import Node
 
-__all__ = ["RESERVED", "Expected", "Image", "Output", "OutputSpec", "normalize_outputs"]
+__all__ = [
+    "LAYOUTS",
+    "NORMALIZE",
+    "RESERVED",
+    "Expected",
+    "Field",
+    "Image",
+    "Output",
+    "OutputSpec",
+    "normalize_outputs",
+]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -51,10 +61,61 @@ class Expected:
         return {"type": "expected"}
 
 
-OutputSpec = Union[Image, Expected, Node]  # noqa: UP007 - a runtime alias used in isinstance
-"""An output spec: :class:`Image`, :class:`Expected`, or a label renderer (``gx.labels.*``)."""
+NORMALIZE = ("background", "incident", "none")
+"""How :class:`Field` normalises the complex field."""
 
-RESERVED: dict[str, OutputSpec] = {"image": Image(), "expected": Expected()}
+LAYOUTS = ("complex", "re_im", "phase", "amplitude")
+"""How :class:`Field` lays the complex field out."""
+
+
+@dataclasses.dataclass(frozen=True)
+class Field:
+    """The complex image field on the camera grid: what a reconstruction should recover.
+
+    Coherent Chains only. The field is formed on the detection samples and averaged over each
+    camera pixel (complex averaging), for one incoherent mode and one wavelength bin.
+
+    Parameters
+    ----------
+    normalize : {"background", "incident", "none"}, default "background"
+        ``"background"`` divides by the unscattered field at each pixel, so an empty field is 1
+        and a scatterer contributes E_s/E_b; ``"incident"`` divides by the amplitude √I₀ of the
+        illumination (for epi geometries, where no background reaches the camera);
+        ``"none"`` keeps √(photons/µm²).
+    layout : {"complex", "re_im", "phase", "amplitude"}, default "complex"
+        Complex ``[B, A, H, W]``; real ``[B, A, H, W, 2]``; ``arg`` of the field in rad; or
+        ``|E|``.
+
+    Raises
+    ------
+    StructureError
+        If ``normalize`` or ``layout`` is unknown.
+    """
+
+    normalize: str = "background"
+    layout: str = "complex"
+
+    def __post_init__(self) -> None:
+        if self.normalize not in NORMALIZE:
+            raise StructureError(f"unknown normalize={self.normalize!r}", fix=f"one of {NORMALIZE}")
+        if self.layout not in LAYOUTS:
+            raise StructureError(f"unknown layout={self.layout!r}", fix=f"one of {LAYOUTS}")
+
+    def to_json(self) -> dict[str, Any]:
+        """Return a JSON-serialisable description.
+
+        Returns
+        -------
+        dict
+            ``{"type": "field", "normalize": …, "layout": …}``.
+        """
+        return {"type": "field", "normalize": self.normalize, "layout": self.layout}
+
+
+OutputSpec = Union[Image, Expected, Field, Node]  # noqa: UP007 - a runtime alias in isinstance
+"""An output spec: :class:`Image`, :class:`Expected`, :class:`Field`, or a label renderer."""
+
+RESERVED: dict[str, OutputSpec] = {"image": Image(), "expected": Expected(), "field": Field()}
 """Reserved output names and their specs."""
 
 ATTRIBUTES: frozenset[str] = frozenset({"get", "items", "keys", "meta", "values"})
@@ -97,10 +158,10 @@ def normalize_outputs(outputs: object) -> dict[str, OutputSpec]:
             spec = RESERVED[spec]
         from gradix.labels.positions import Label
 
-        if not isinstance(spec, (Image, Expected, Label)):
+        if not isinstance(spec, (Image, Expected, Field, Label)):
             kind = type(spec).__name__
             msg = f"output {name!r}: a {kind} is not an output spec"
-            fix = "use 'image', 'expected', gx.out.Image(...), gx.out.Expected(...) or a label"
+            fix = "use 'image', 'expected', 'field', gx.out.Field(...) or a label"
             raise StructureError(msg, fix=fix)
         out[name] = spec
     if not out:

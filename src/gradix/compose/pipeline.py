@@ -47,6 +47,7 @@ from gradix.compose.chain import Chain
 from gradix.compose.gradients import GradientTable, gradient_table, warn_partial
 from gradix.compose.memory import MemoryPlan, plan_memory
 from gradix.compose.outputs import Expected, Image, Output, OutputSpec, normalize_outputs
+from gradix.compose.outputs import Field as FieldOutput
 from gradix.compose.rewrites import rewrites
 from gradix.compose.sampling import SamplingPlan, sampling_plan
 from gradix.compose.validity import check as check_validity
@@ -81,7 +82,7 @@ def _slot_counts(chain: Chain) -> dict[str, int]:
 
 
 def _spec_json(spec: OutputSpec) -> dict[str, object]:
-    if isinstance(spec, (Image, Expected)):
+    if isinstance(spec, (Image, Expected, FieldOutput)):
         return spec.to_json()
     fields: dict[str, object] = {}
     tensors: dict[str, object] = {}
@@ -118,6 +119,8 @@ def _spec_json(spec: OutputSpec) -> dict[str, object]:
 def _spec_from_json(data: Mapping[str, Any]) -> object:
     """Rebuild an output spec: a reserved name, or a registered label from its static fields."""
     if not data.get("label"):
+        if data["type"] == "field":
+            return FieldOutput(normalize=data["normalize"], layout=data["layout"])
         return data["type"]
     from gradix._core.registry import labels
 
@@ -547,12 +550,15 @@ class Pipeline:
             lines.append(("sampling   " if i == 0 else "           ") + line)
         lines.append(" # stage     implementation")
         imaging = self.template.imaging
-        dense = isinstance(imaging, Element) and EmitterSet not in imaging.caps.accepts
-        carrier = "EmitterDensity" if dense else "EmitterSet"
-        lines.append(
-            f" 1 lower     {', '.join(sorted(self.template.emitters))} → {carrier} (exact)"
-        )
-        for i, (path, element) in enumerate(_elements(self.template).items(), start=2):
+        first = 1
+        if not execute.coherent(self.template):  # coherent scatterers are elements of their own
+            dense = isinstance(imaging, Element) and EmitterSet not in imaging.caps.accepts
+            carrier = "EmitterDensity" if dense else "EmitterSet"
+            lines.append(
+                f" 1 lower     {', '.join(sorted(self.template.emitters))} → {carrier} (exact)"
+            )
+            first = 2
+        for i, (path, element) in enumerate(_elements(self.template).items(), start=first):
             name = getattr(type(element), "registry_name", None) or type(element).__name__
             lines.append(f" {i} {path:9s} {name}")
             for edge in element.caps.approximates:
@@ -788,6 +794,7 @@ class Pipeline:
                 mu = execute.expected(sub, statics)
                 frames.append(mu.expand(size, *mu.shape[1:]) if mu.shape[0] != size else mu)
             label_parts.append(execute.labels(sub, outputs, size))
+            label_parts[-1].update(execute.fields(sub, statics, outputs, size))
         mu_all = torch.cat(frames, 0) if frames else None
         values = execute.finish(chain, mu_all, key, outputs)
         values.update(execute.concat(label_parts))

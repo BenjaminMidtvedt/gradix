@@ -51,9 +51,11 @@ from gradix import (
     out,
     presets,
     pupil,
+    recon,
     register,
     registry,
     sampling,
+    special,
     tree,
     units,
 )
@@ -210,12 +212,14 @@ __all__ = [
     "plan",
     "presets",
     "pupil",
+    "recon",
     "register",
     "registry",
     "render",
     "sampling",
     "schema_of",
     "signature",
+    "special",
     "stack",
     "to_si",
     "tree",
@@ -226,7 +230,7 @@ __all__ = [
 def _register_core() -> None:
     """Register the core data objects, containers and carriers under their stable names."""
     from gradix._core import registry as _registry
-    from gradix.interact.dipole import DipoleParams
+    from gradix.interact.mie import MieParams
     from gradix.objects.acquisition import FocusStack, Frames
     from gradix.objects.environment import Homogeneous, LayeredMedium
     from gradix.objects.labeling import Isotropic
@@ -235,7 +239,7 @@ def _register_core() -> None:
     core = (
         Objective, Spectrum, Homogeneous, LayeredMedium, Frames, FocusStack, Constant, Cauchy,
         Sellmeier, Isotropic, Polarization, Chain, Sample, Microscope, EmitterSet, EmitterDensity,
-        Irradiance, PlaneWaves, GaussianSheet, Field, ObjectSpectra, DipoleParams,
+        Irradiance, PlaneWaves, GaussianSheet, Field, ObjectSpectra, MieParams,
     )  # fmt: skip
     for cls in core:
         name = cls.__dict__.get("registry_name")

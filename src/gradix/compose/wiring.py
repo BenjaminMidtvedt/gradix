@@ -44,6 +44,11 @@ def check_wiring(chain: Chain) -> None:
         Naming the link whose producer's carrier the consumer does not accept.
     """
     light, excite, imaging = chain.light, chain.excite, chain.imaging
+    for name, element in chain.scatterers.items():  # light → scatterers → imaging (coherent)
+        if isinstance(light, Element) and isinstance(element, Element):
+            _link("light", light, f"scatterers.{name}", element)
+        if isinstance(element, Element) and isinstance(imaging, Element):
+            _link(f"scatterers.{name}", element, "imaging", imaging)
     if isinstance(light, Element) and isinstance(excite, Element):
         _link("light", light, "excite", excite)
     if isinstance(excite, Element) and isinstance(imaging, Element):

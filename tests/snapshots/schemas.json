@@ -2560,8 +2560,8 @@
   "name": "optics.objective",
   "version": 2
  },
- "data_object:params.dipole": {
-  "class": "gradix.interact.dipole.DipoleParams",
+ "data_object:params.mie": {
+  "class": "gradix.interact.mie.MieParams",
   "fields": [
    {
     "components": null,
@@ -2571,21 +2571,44 @@
      "B|1",
      "A|1",
      "N",
-     "L"
+     "L",
+     "*"
     ],
     "dtype": "complex",
     "event": [],
     "kind": "tensor",
-    "name": "amplitude",
+    "name": "a",
     "optional": false,
-    "quantity": "length",
+    "quantity": "dimensionless",
     "required": true,
     "role": "carrier",
     "shape_affecting": false,
-    "unit": "\u00b5m"
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N",
+     "L",
+     "*"
+    ],
+    "dtype": "complex",
+    "event": [],
+    "kind": "tensor",
+    "name": "b",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
    }
   ],
-  "name": "params.dipole",
+  "name": "params.mie",
   "version": 1
  },
  "data_object:sample": {
@@ -2972,7 +2995,7 @@
   "version": 4
  },
  "element:interact.dipole": {
-  "class": "gradix.interact.dipole.Dipole",
+  "class": "gradix.interact.mie.Dipole",
   "fields": [
    {
     "container": "node",
@@ -2984,6 +3007,29 @@
    }
   ],
   "name": "interact.dipole",
+  "version": 2
+ },
+ "element:interact.mie": {
+  "class": "gradix.interact.mie.Mie",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "objects",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": "auto",
+    "kind": "static",
+    "name": "terms",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "interact.mie",
   "version": 1
  },
  "element:source.evanescent": {

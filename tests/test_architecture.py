@@ -45,7 +45,7 @@ GROUPS = {
         "gradix.pupil",
     ),
     "labels": ("gradix.labels", "gradix.coords"),
-    "L3": ("gradix.compose", "gradix.out"),
+    "L3": ("gradix.compose", "gradix.out", "gradix.recon"),
     "L4": ("gradix.planner", "gradix.containers", "gradix.presets", "gradix.api"),
     "testing": ("gradix.testing", "gradix.accel", "gradix.experimental"),
 }

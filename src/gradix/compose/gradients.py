@@ -20,10 +20,11 @@ from collections.abc import Mapping
 
 from torch import Tensor
 
+from gradix._core.carriers import ObjectSpectra
 from gradix._core.contract import GRAD_QUALITIES, Element, worst_quality
 from gradix._core.errors import GradientPathError, GradixWarning
 from gradix.compose.chain import Chain
-from gradix.compose.outputs import Expected, Image, OutputSpec
+from gradix.compose.outputs import Expected, Field, Image, OutputSpec
 from gradix.detect.camera import Camera
 from gradix.labels.positions import Label
 from gradix.schema.base import iter_leaves
@@ -69,6 +70,13 @@ def _route_quality(chain: Chain, path: str, output: str) -> str:
             routes.append(camera.field_quality(rest[len("camera.") :], output))
     elif head == "detector" and camera is not None:
         routes.append(camera.field_quality(rest, output))
+    elif head == "scatterers" and imaging is not None:
+        # a scatterer's fields → its spectra → the coherent image
+        name, _, field = rest.partition(".")
+        element = chain.scatterers.get(name)
+        if isinstance(element, Element) and field:
+            own = element.field_quality(field, output)
+            routes.append(_through(own, imaging.input_quality("spectra", output), sensor))
     elif head == "environment" and imaging is not None:
         routes.append(_through(imaging.input_quality("environment", output), sensor))
         excite = chain.excite if isinstance(chain.excite, Element) else None
@@ -83,6 +91,9 @@ def _route_quality(chain: Chain, path: str, output: str) -> str:
             routes.extend(_route_quality(chain, tree, output) for tree in chain.resolve(target))
     elif head in ("light", "excite") and imaging is not None:
         excite = chain.excite if isinstance(chain.excite, Element) else None
+        if head == "light" and ObjectSpectra in imaging.caps.accepts:
+            # coherent: the light is the background and illuminates every scatterer
+            routes.append(_through(imaging.input_quality("light", output), sensor))
         if excite is not None:  # light → excitation → emitted photons → image
             own = excite.input_quality("light") if head == "light" else excite.field_quality(rest)
             emitted = imaging.input_quality("photons", output)
@@ -269,7 +280,7 @@ def gradient_table(chain: Chain, outputs: Mapping[str, OutputSpec]) -> GradientT
         for name, out in outputs.items():
             if integer:
                 row[name] = "zero"
-            elif isinstance(out, Expected):
+            elif isinstance(out, (Expected, Field)):  # a field: the expected route
                 row[name] = _route_quality(chain, path, "expected")
             elif isinstance(out, Image):
                 row[name] = _route_quality(chain, path, "image")

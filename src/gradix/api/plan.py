@@ -125,14 +125,26 @@ class Plan:
             The Chain a user could build by hand: ``plan(s, m) == plan.pipeline(plan.chain(s, m))``.
         """
         emit = sorted({r.element for r in self.routes.values() if r.element.startswith("emit.")})
+        interact = {
+            name: r.element for name, r in self.routes.items() if r.element.startswith("interact.")
+        }
         other = sorted(
-            {r.element for r in self.routes.values() if not r.element.startswith("emit.")}
+            {
+                r.element
+                for r in self.routes.values()
+                if not r.element.startswith(("emit.", "interact."))
+            }
         )
         if other:
             raise PlanError(
                 f"elements {other} are not available in this version",
-                fix="coherent paths arrive with M3",
+                fix="Born, projection and multislice arrive with M3 and M4",
             )
+        if interact:
+            if emit:
+                msg = "the Sample mixes emitters and scatterers, which one Chain cannot image"
+                raise PlanError(msg, fix="plan them as two Samples")
+            return self._coherent_chain(sample, microscope, interact)
         if len(emit) > 1:
             msg = f"emitter populations route to different elements {emit}"
             raise PlanError(
@@ -156,6 +168,29 @@ class Plan:
             excite=excite,
             imaging=imaging,
             camera=microscope.camera,
+            background=microscope.background,
+            acquisition=microscope.acquisition,
+            environment=sample.environment,
+        )
+
+    def _coherent_chain(
+        self, sample: Sample, microscope: Microscope, interact: Mapping[str, str]
+    ) -> Chain:
+        """Build the coherent Chain: the light, one interaction element per population, imaging."""
+        if microscope.light is None:
+            raise PlanError(
+                "scatterers need coherent light",
+                fix="use gx.presets.InlineHolography(light=gx.light.PlaneWave(λ), ...)",
+            )
+        scatterers = {
+            name: build(choice, {"objects": sample.populations[name]}, self.fidelity, name)
+            for name, choice in sorted(interact.items())
+        }
+        parts = {"objective": microscope.objective, "camera": microscope.camera}
+        return Chain(
+            light=microscope.light,
+            scatterers=scatterers,
+            imaging=build("coherent.pupil", parts, self.fidelity),
             background=microscope.background,
             acquisition=microscope.acquisition,
             environment=sample.environment,

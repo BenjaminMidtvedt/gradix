@@ -4,6 +4,6 @@ Kernels never draw from global or stateful random state: they take explicit keys
 The public surface is unstable until 1.0 (no SemVer guarantee).
 """
 
-from gradix.ops import detect, emitters, fourier
+from gradix.ops import detect, emitters, fourier, propagation, pupil
 
-__all__ = ["detect", "emitters", "fourier"]
+__all__ = ["detect", "emitters", "fourier", "propagation", "pupil"]

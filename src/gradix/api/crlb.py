@@ -338,7 +338,8 @@ def crlb(
 
 def _unit(spec: FieldSpec) -> str:
     quantity = QUANTITIES.get(spec.quantity or "")
-    return quantity.unit if quantity is not None else ""
+    unit = quantity.unit if quantity is not None else ""
+    return "" if unit == "1" else unit  # dimensionless
 
 
 def _resolve(
