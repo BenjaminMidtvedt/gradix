@@ -19,6 +19,7 @@ size and slot counts are capacities: calls may use fewer images or objects, neve
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import hashlib
 import json
 import time
@@ -289,6 +290,8 @@ class Pipeline:
         The batch capacity.
     slots : dict of str to int
         The slot capacity of every population.
+    precision : PrecisionPolicy
+        What the kernels run in: float64 when a template tensor is float64, else float32.
     hash : str
         A short hash of the build state.
 
@@ -358,6 +361,7 @@ class Pipeline:
         leaves = [v for _, _, v in iter_leaves(chain)]
         self.device = common_device(*leaves)
         self.dtype = result_dtype(*leaves)
+        self.precision = dataclasses.replace(DEFAULT, real=self.dtype)  # what the kernels run in
         # P1 envelope
         explicit = envelope if isinstance(envelope, Envelope) else Envelope(envelope or {})
         check_paths(explicit, chain)
@@ -421,7 +425,7 @@ class Pipeline:
             "chunks": dict(sorted(self.memory.chunks.items())),
             "deterministic": self.deterministic,
             "device": _device_class(self.device),
-            "precision": DEFAULT.describe(),
+            "precision": self.precision.describe(),
             "stages": {
                 path: getattr(type(e), "registry_name", None) or type(e).__qualname__
                 for path, e in _elements(self.template).items()
@@ -539,7 +543,7 @@ class Pipeline:
             The report.
         """
         lines = [
-            f"Pipeline {self.hash} · B≤{self.batch} · {self.device} · {DEFAULT.describe()}"
+            f"Pipeline {self.hash} · B≤{self.batch} · {self.device} · {self.precision.describe()}"
             f" · built in {self.build_ms:.0f} ms"
         ]
         if self.inputs:

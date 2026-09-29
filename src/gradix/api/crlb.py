@@ -55,6 +55,17 @@ METHODS = ("auto", "forward", "central")
 """Ways to compute the Jacobian: forward mode, falling back to central differences (auto)."""
 
 
+@dataclasses.dataclass(frozen=True)
+class _Slot:
+    """Where one ``wrt`` entry's bounds sit in the parameter vector, and their shape."""
+
+    path: str
+    per_image: bool
+    count: int
+    shape: tuple[int, ...]
+    dtype: torch.dtype
+
+
 @dataclasses.dataclass(frozen=True, eq=False)
 class CRLB(Mapping[str, Tensor]):
     """Cramér–Rao lower bounds on fields of a Chain, read as a mapping from path to bound.
@@ -63,6 +74,10 @@ class CRLB(Mapping[str, Tensor]):
     of that field can reach from the images, in the field's unit and shaped like its value (a
     component path such as ``"beads.position.z"`` drops the component axis). Parameters that
     no image depends on, such as the positions of absent objects, have an infinite bound.
+
+    Independent measurements of the same parameters add their Fisher information:
+    ``bound_a + bound_b`` (or ``sum(bounds)``) is the bound from both, such as frames taken under
+    two states of a spatial light modulator, or two modalities imaging the same sample.
 
     Parameters
     ----------
@@ -86,6 +101,10 @@ class CRLB(Mapping[str, Tensor]):
         Findings: the noise model's accuracy and any warnings raised on the way.
     reconstruction : str, optional
         The reconstruction the information was taken through; None for the raw frames.
+    measurements : int, default 1
+        How many independent measurements the information sums.
+    layout : tuple, default ()
+        Where each ``wrt`` entry's parameters sit, and their shapes (used to combine bounds).
     """
 
     std: Mapping[str, Tensor]
@@ -97,6 +116,8 @@ class CRLB(Mapping[str, Tensor]):
     method: str
     notes: tuple[str, ...] = ()
     reconstruction: str | None = None
+    measurements: int = 1
+    layout: tuple[_Slot, ...] = ()
 
     def __getitem__(self, path: str) -> Tensor:
         try:
@@ -110,6 +131,72 @@ class CRLB(Mapping[str, Tensor]):
     def __len__(self) -> int:
         return len(self.std)
 
+    def __add__(self, other: object) -> CRLB:
+        """Return the bound from both measurements: their Fisher information adds.
+
+        Parameters
+        ----------
+        other : CRLB
+            A bound on the same parameters from an independent measurement.
+
+        Returns
+        -------
+        CRLB
+            The combined bound, differentiable in both measurements' tensors.
+
+        Raises
+        ------
+        StructureError
+            If the two bound different parameters.
+        """
+        if not isinstance(other, CRLB):
+            return NotImplemented
+        if self.labels != other.labels or self.layout != other.layout:
+            raise StructureError(
+                "only bounds on the same parameters combine",
+                fix="bound the same wrt paths in both measurements",
+            )
+        info = self.fisher + other.fisher
+        own = len(self.labels) - self.shared
+        covariance, singular = _covariance(info, own)
+        notes = [*self.notes, *(n for n in other.notes if n not in self.notes)]
+        if bool(singular.any()):
+            bad = torch.nonzero(singular).flatten().tolist()
+            notes.append(
+                f"the Fisher information of images {bad} is singular: their bounds are NaN"
+            )
+        through = [r for r in (self.reconstruction, other.reconstruction) if r]
+        return CRLB(
+            std=_bounds(covariance, self.layout, own, order=tuple(self.std)),
+            fisher=info,
+            covariance=covariance,
+            labels=self.labels,
+            shared=self.shared,
+            units=self.units,
+            method=self.method if self.method == other.method else "mixed",
+            notes=tuple(notes),
+            reconstruction=" + ".join(through) if through else None,
+            measurements=self.measurements + other.measurements,
+            layout=self.layout,
+        )
+
+    def __radd__(self, other: object) -> CRLB:
+        """Let ``sum()`` start from 0.
+
+        Parameters
+        ----------
+        other : object
+            0, or a bound.
+
+        Returns
+        -------
+        CRLB
+            This bound, or the sum.
+        """
+        if isinstance(other, int) and other == 0:
+            return self
+        return self.__add__(other)
+
     def explain(self) -> str:
         """Return a report: the parameters, the method, the bounds and the findings.
 
@@ -120,9 +207,13 @@ class CRLB(Mapping[str, Tensor]):
         """
         own = len(self.labels) - self.shared
         through = f" · through {self.reconstruction}" if self.reconstruction else ""
+        combined = f" · {self.measurements} measurements" if self.measurements > 1 else ""
+        how = {"forward": "forward mode", "central": "central differences"}.get(
+            self.method, "several methods"
+        )
         lines = [
             f"CRLB · {own} parameter(s) per image, {self.shared} shared · Jacobian by "
-            f"{self.method} {'mode' if self.method == 'forward' else 'differences'}{through}"
+            f"{how}{through}{combined}"
         ]
         for path, std in self.std.items():
             finite = std[torch.isfinite(std)]
@@ -355,17 +446,9 @@ def crlb(
     if bool(singular.any()):
         bad = torch.nonzero(singular).flatten().tolist()
         _warn(notes, f"the Fisher information of images {bad} is singular: their bounds are NaN")
-    std = covariance.diagonal(dim1=-2, dim2=-1).sqrt()  # [B, P]
-    bounds: dict[str, Tensor] = {}
-    start = {"own": 0, "shared": own}
-    for f in ordered:
-        scope = "own" if f.per_image else "shared"
-        block = std[:, start[scope] : start[scope] + f.count]
-        start[scope] += f.count
-        block = block if f.per_image else block[0]
-        bounds[f.path] = block.reshape(f.shape).to(f.value.dtype)
+    layout = tuple(_Slot(f.path, f.per_image, f.count, f.shape, f.value.dtype) for f in ordered)
     return CRLB(
-        std={f.path: bounds[f.path] for f in fields},
+        std=_bounds(covariance, layout, own, order=tuple(f.path for f in fields)),
         fisher=info,
         covariance=covariance,
         labels=tuple(label for f in ordered for label in f.labels()),
@@ -374,7 +457,24 @@ def crlb(
         method=used,
         notes=tuple(notes),
         reconstruction=None if reconstruction is None else _name(reconstruction),
+        layout=layout,
     )
+
+
+def _bounds(
+    covariance: Tensor, layout: tuple[_Slot, ...], own: int, order: tuple[str, ...]
+) -> dict[str, Tensor]:
+    """Return each ``wrt`` entry's bounds, shaped like its value, in ``order``."""
+    std = covariance.diagonal(dim1=-2, dim2=-1).sqrt()  # [B, P]
+    bounds: dict[str, Tensor] = {}
+    start = {"own": 0, "shared": own}
+    for slot in layout:
+        scope = "own" if slot.per_image else "shared"
+        block = std[:, start[scope] : start[scope] + slot.count]
+        start[scope] += slot.count
+        block = block if slot.per_image else block[0]
+        bounds[slot.path] = block.reshape(slot.shape).to(slot.dtype)
+    return {path: bounds[path] for path in order}
 
 
 def _name(reconstruction: object) -> str:
@@ -618,7 +718,8 @@ def _field(chain: Chain, path: str, batch: int, pipeline: Pipeline) -> _Field:
         raise StructureError(f"{path!r} is absent in the Chain", fix="give it a value")
     real = spec.dtype in ("real", "number")
     if isinstance(value, Tensor) and value.is_floating_point():
-        tensor = value
+        # an expanded view (stride 0) cannot carry a forward-mode tangent: materialise it
+        tensor = value.contiguous() if 0 in value.stride() and value.numel() > 1 else value
     elif isinstance(value, (int, float)) and not isinstance(value, bool) and real:
         # a Python number: one parameter shared by every image
         tensor = torch.tensor(float(value), dtype=pipeline.dtype, device=pipeline.device)

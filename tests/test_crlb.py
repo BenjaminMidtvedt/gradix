@@ -234,3 +234,13 @@ def test_refusals():
     noiseless = gx.tree.replace(chain, {"imaging.camera.noise": None})
     with pytest.raises(gx.StructureError, match="noise model"):
         gx.crlb(noiseless, wrt="beads.position")
+
+
+def test_expanded_values_are_bounded():
+    # a value broadcast with .expand() shares memory across images; forward mode needs a copy
+    chain = scene(b=3)
+    photons = torch.tensor(1000.0).expand(3, 1)
+    beads = chain.population("beads").replace(photons=photons)
+    chain = chain.replace(emitters={"beads": beads})
+    bound = gx.crlb(chain, wrt="beads.photons")
+    assert torch.isfinite(bound["beads.photons"]).all()

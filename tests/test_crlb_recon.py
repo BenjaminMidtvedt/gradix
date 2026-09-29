@@ -195,3 +195,26 @@ def test_nearly_degenerate_radius_and_index_keep_finite_bounds():
     for path in wrt:
         assert torch.isfinite(kept[path]).all(), path
         assert bool((kept[path] >= raw[path]).all()), path  # a reconstruction never helps
+
+
+def test_independent_measurements_add_their_information():
+    chain = offaxis(shape=24, cycles=7)
+    pipe = gx.Pipeline(chain, outputs=("expected",))
+    wrt = ("beads.radius", "beads.material")
+    recon = gx.recon.OffAxis.from_chain(chain)
+    radius = torch.tensor([[[0.15]]], dtype=F64, requires_grad=True)
+    material = torch.tensor([[[1.59]]], dtype=F64)
+    beads = chain.population("beads").replace(radius=radius, material=material)
+    moved = chain.replace(scatterers={"beads": gx.interact.Mie(beads)})
+    once = gx.crlb(pipe, moved, wrt=wrt, reconstruction=recon)
+    twice = once + once  # two identical exposures: half the variance
+    for path in wrt:
+        assert torch.allclose(twice[path], once[path] / math.sqrt(2.0), rtol=1e-10)
+    total = sum([once, once])
+    assert isinstance(total, gx.CRLB) and total.measurements == 2
+    assert "2 measurements" in twice.explain()
+    (grad,) = torch.autograd.grad(twice["beads.radius"].sum(), radius)
+    assert torch.isfinite(grad).all()
+    other = gx.crlb(pipe, moved, wrt=wrt[:1], reconstruction=recon)
+    with pytest.raises(gx.StructureError, match="same parameters"):
+        _ = once + other
