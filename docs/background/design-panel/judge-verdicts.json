@@ -1,0 +1,890 @@
+[
+ {
+  "lens": "PHYSICS AND GENERALITY: physical correctness of models/approximations, span of label-free coherent, partially coherent, interferometric and fluorescence modalities without leaks, sampling/aliasing correctness, and whether the fidelity ladder is physically meaningful (lower tiers are true limits of higher tiers). Two claims were checked numerically on the RTX 3090 with C:/Users/GU/AppData/Local/Temp/claude/E--gradoscopy/99946eca-1cc6-4a91-af2f-f473c8d3717f/scratchpad/judge_physics/abbe_check.py (thin phase object, NA 0.4, exact on-grid Abbe reference).",
+  "scores": [
+   {
+    "proposal": "A-field-operators",
+    "physics_generality": 9,
+    "fidelity_mechanism": 8.5,
+    "feasibility_and_scope": 6.5,
+    "performance_memory": 8.5,
+    "learnability_ml_usability": 8,
+    "extensibility_modularity": 9,
+    "deeptrack_integration": 8,
+    "overall": 8.5,
+    "strengths": [
+     "§4.3 Field = analytic PlaneWaves ⊕ sampled scattered part. Measured: it avoids the 8–10 % rms seam error of off-grid tilts, and it cuts the weak-interference error from 8.7 % to 2e-7 at 5e-6 contrast. Darkfield stops, phase rings, iSCAT reference attenuation and DIC bias act on the zero order by exact evaluation. The thin-screen and BPM update (E_b, (t−1)E_b + tE_s) is algebraically correct. It also injects evanescent TIRF excitation Born-style into the march, as brief 04 recommends",
+     "§4.5 AngularSource uses coherence groups: Wolf's cross-spectral density W = Σ w_g A_g⊗A_g*. One abstraction covers Köhler, finite-size LEDs, 2–3-beam SIM groups, evanescent TIRF, speckle and references. Coherence is bookkeeping reduced only once, in Detect",
+     "§4.7/§5.2 has a closed operator vocabulary with Transduce, which gives two-stage physics (TIRF, SIM, light sheet, 2P, bleaching) with separate excitation and emission spectra, plus combinators coherent_sum, acquire and split. Brief 08's coverage check spans all four modality families without special cases",
+     "Two ports with an analytic LayeredMedium Fresnel reflection and dipole/Mie backscatter in v1 give a physically grounded iSCAT reference, not an angle convention",
+     "§5.7 fast paths are rewrites guarded by theorems (collapses a and b, WOTF), each CI-tested against its uncollapsed graph. SOCS is refused when optics are learnable, because degenerate-SVD gradients are unstable",
+     "Sampling is the most complete of the four. The λ-independent pupil grid in u = λk⊥ feeds per-λ MFTs onto one common grid. Pixel MTF followed by MFT to continuous pixel centres makes camera aliasing physical. The MFT period condition is stated, TF32 error is measured (4.4e-4), and runtime diagnostics report band-edge energy and padding wrap",
+     "Each implementation declares what it `approximates`, with regime-bounded convergence tables that recalibrate validity thresholds. It also has a fold policy for parameters that a tier cannot represent"
+    ],
+    "weaknesses_or_errors": [
+     "§13.1 claims 'float precision is relative, so metres cost nothing numerically'. That is wrong about float32 exponent range: for a 10 nm particle α² ≈ 1e-47 m⁶ underflows (measured by C), and a⁶ darkfield scaling underflows too",
+     "§4.1 says 'Apodization is √cosθ for focusing and 1/√cosθ for collection, plus the 1/k_z Jacobian', yet the interchange quantity is an angular spectrum. Applied to angular-spectrum densities this is off by cos²θ (see errors_to_fix)",
+     "§5.2 `koehler.single` puts the single mode at the source centroid. For an annulus (phase contrast or darkfield) that point lies outside the source support, which gives wrong-sign phase contrast (verified) and turns darkfield into brightfield",
+     "§5.9 treats the ladder as one chain, projection → Rytov → BPM → SSNP → MBS. It is not strictly nested: Rytov and Born are not limits of paraxial-interaction BPM",
+     "The dense grid rule, spacing = min(pitch/M/s, λ/(4NA_max)), is derived from detection Nyquist. It does not cover the march bandwidth n_m/λ at low NA",
+     "In v1 the mixed-sample host-index rule and C1 injection are only hooks",
+     "Scope is large for 1–2 developers: vectorial optics, two-stage physics, and every operator carrying the dual-part Field"
+    ]
+   },
+   {
+    "proposal": "B-scene-planner",
+    "physics_generality": 8.5,
+    "fidelity_mechanism": 7,
+    "feasibility_and_scope": 5,
+    "performance_memory": 8,
+    "learnability_ml_usability": 8,
+    "extensibility_modularity": 8.5,
+    "deeptrack_integration": 8,
+    "overall": 7.5,
+    "strengths": [
+     "§5.6 treats mixed samples as a partition problem. Containment and proximity come from bounds. An embedded particle's Mie response uses the host index m = n_p/n_host. Cut-out-and-fill renders host material in place of an analytically solved bead, so the bead is not counted twice. This is the most physically careful handling of beads in cells",
+     "§5.11 sets a consistency contract across tiers: same mean photon count, frames, sub-pixel origin and contrast signs (DT #445). This is exactly what makes lower tiers comparable approximations",
+     "The v1 physics span is broad: thin, Born/Rytov (form factor and slices), BPM, SSNP (a non-paraxial rung above BPM), Mie, dipole, C1 injection, vectorial Richards–Wolf, and TIRF/SIM/light-sheet/confocal source maps. Excitation forms (plane-wave batch, field on a plane, field_at, irradiance) follow the brief 04 contract",
+     "§4.2/§5.9 SamplingPlan records provenance for each choice. The field is squared only after 2× band padding. There are a spectral-bin criterion N_λ ≥ 4ΔOPD/l_c, an explicit-interference rule for contrast < 1e-3, and Jones-on-Stokes reduction for partial polarization",
+     "§13.1 uses µm internally, with the correct float32-range argument (a⁶ is subnormal in metres)",
+     "The gradient audit makes a zero-gradient path a compile error (hard voxelizer on a learnable radius)"
+    ],
+    "weaknesses_or_errors": [
+     "§5.7 makes the interaction axis a total order: I1 thin < I2 Born/Rytov < I4a BPM < I4b SSNP < I5, and projection < dipole < Mie. That is physically non-nested. Born beats BPM for weak high-angle scattering and is the only cheap rung with an R port. Dipole and projection are limits in opposite regimes. 'balanced ≥ I4a' can therefore force a less accurate solver",
+     "It never handles off-grid tilted plane waves on periodic grids (Köhler points, LED arrays for FPM/IDT). Dense producers carry a sampled zero order, which is subject to seam ringing (8–10 % rms, measured by A)",
+     "§4.1 copies the ambiguous apodization rule, '1/√cosθ collection with a 1/k_z Jacobian', onto an angular-spectrum currency",
+     "WOTF is required to be 'thin'. A 3D WOTF is valid for thick weak objects",
+     "C1 injects the Mie spectrum at the bead's centre plane. The outgoing angular-spectrum representation is exact only beyond z_p + a",
+     "§9b folds the bead as |F_ball(k)| 'into the OTF'. A bead's incoherent extent is a convolution of the intensity PSF with the signed 3D form factor",
+     "A Cascades cost search plus SSNP, C1, vectorial optics and two-stage physics all in v1 is a feasibility risk. The same sampling gap as A applies to dense grids"
+    ]
+   },
+   {
+    "proposal": "C-mvp-scope",
+    "physics_generality": 5.5,
+    "fidelity_mechanism": 6.5,
+    "feasibility_and_scope": 9,
+    "performance_memory": 7,
+    "learnability_ml_usability": 7,
+    "extensibility_modularity": 6.5,
+    "deeptrack_integration": 8.5,
+    "overall": 6.6,
+    "strengths": [
+     "The physics that is included is careful. The projection screen is placed at the object's centre plane z_c and then back-propagated, which makes it exactly the one-slice limit of multislice. Mie → angular spectrum uses A = −S(θ)/(2π k_m k_z)·e^{−i(k−k_in)·r_p}, which is correct and pinned by a direct-summation test. The inter-slice propagator is free space, not NA-truncated. Köhler points are snapped to the k-grid, so tilts are exact spectral shifts on the periodic grid",
+     "The ladder pairs are true limits within stated regimes, each with tolerance targets: dipole↔Mie (x<0.3), projection↔multislice (d ≤ DOF/4), voxel-sphere multislice↔Mie (Δn ≤ 0.05), Abbe K↔K_ref, gaussian↔pupil near focus",
+     "µm units are backed by a measured underflow: α² → 0 in float32 metres for a 10 nm particle",
+     "Validity is honest. A fixed-dipole fluorophore is an error until vectorial optics exist. An Abbe×multislice cost warning is given",
+     "Sampling rules include (NA+NA_ill)/λ representability for thin samples. The ROI auto-grows with the PSF extent"
+    ],
+    "weaknesses_or_errors": [
+     "v1 is scalar only. It has no Born/Rytov (so no cheap reflection rung), no TIRF/evanescent excitation and no stratified media. iSCAT-lite in a homogeneous medium uses a constant r = 0.067 and omits Fresnel transmission. Excitation exists only as a user callable fn(xyz): two-stage excitation is never physically derived",
+     "The draft preset uses 1 on-axis source point for phase contrast. Verified: object contrast −0.31, against +5.9 for the full annulus and +9.2 for one point on the annulus. The sign is wrong and the magnitude 20× too weak, whereas §5.3 only says 'halo needs M>1'",
+     "§4.1 radiometry normalizes the PSF to collection efficiency only in `accurate` and to 1 elsewhere. The tiers then differ by about 3× in brightness at NA 1.4, so lower tiers are not limits of higher ones",
+     "The contract has no two-port concept (only direction ±1) and no field_at/respond hooks, so C1/C2 coupling and fluorescence through volumes (E3) will need contract changes",
+     "Some §5.6 criteria are mis-stated: 'multislice dz > λ_m/2 → raise' contradicts the λ_m/2…λ_m range, and 'projection phase > 1 rad' confuses projection validity (thickness vs DOF) with the weak-object limit",
+     "The multislice grid is derived from detection Nyquist (see errors_to_fix)"
+    ]
+   },
+   {
+    "proposal": "D-learnable-pipelines",
+    "physics_generality": 7.5,
+    "fidelity_mechanism": 7.5,
+    "feasibility_and_scope": 6.5,
+    "performance_memory": 8.5,
+    "learnability_ml_usability": 9.5,
+    "extensibility_modularity": 8,
+    "deeptrack_integration": 8.5,
+    "overall": 7.3,
+    "strengths": [
+     "§5.6 step 4 reports validity as a probability from a validation draw ('Born invalid for 12 % of sampled spheres'). This is the right semantics for random scenes, and it leads naturally to per-instance routing",
+     "Exp A measured that ROI wrap-around costs 5.7 % relative L2 while conserving energy. The planner therefore sizes the ROI from defocus bounds and NA, with a global-spectrum fallback",
+     "The measured estimator behaviour is physically relevant to noise learning: plain straight-through Poisson gives exactly 0 on a variance-sensitive loss, and Concrete at τ=1 gives the wrong sign. The Binomial-slot count approximation carries a correct variance-error warning (error = p)",
+     "v1 includes vectorial RW with the 6-basis, Born/Rytov plus tilt-BPM with reversible adjoints, analytic excitation patterns with source maps, and T/R port tags. MultiView renders one trace into several modalities, which is consistent multimodal physics",
+     "The axial strata criterion Δz ≤ λ/(2(n−√(n²−NA²))) is correct"
+    ],
+    "weaknesses_or_errors": [
+     "The §5.5 'fast' tier uses stochastic Abbe with K=2 for data generation. Verified: 4.0 % RMS deviation from exact Abbe, spatially structured, against 1.0 % shot noise at 1e4 photons/px. Unbiasedness in expectation does not make individual training images physical",
+     "It does not handle off-grid tilts or seams for Köhler/LED sources. iSCAT is 'lite', and Mie R-port support is deferred",
+     "§4.1 has the same apodization-convention issue as A and B",
+     "§4.1 points +z into the sample with per-solver frame flips, which adds sign risk relative to one propagation-aligned frame",
+     "The physics layer is largely inherited from the briefs. Reference/zero-order handling is less developed than in A or C",
+     "'Randomised fidelity as augmentation' mixes non-physical tier artefacts into training data and needs care"
+    ]
+   }
+  ],
+  "recommended_base": "A-field-operators",
+  "grafts": [
+   {
+    "from": "B-scene-planner",
+    "idea": "Mixed-sample partition: an embedded particle uses its host index (m = n_p/n_host, x = k_host·a), and cut-out-and-fill replaces an analytically solved bead with host material in the voxel lowering. Add a coupling axis C0/C1 with a C0 warning that is computed from proximity bounds",
+    "why": "This is the only proposal that prevents double-counting a bead as both voxel and Mie scatterer, and it gets the relative index right for beads inside cells, which brief 04 calls DT's main physical gap"
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "A tested consistency contract across all fidelity tiers: same absolute radiometry (collection efficiency), frames, sub-pixel origin and contrast-sign conventions",
+    "why": "Without it, lower tiers are not limits of higher ones (C's tiers differ by ~3× in brightness), and learned photon or contrast distributions become tier-dependent"
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "SamplingPlan with provenance per decision. Enforce 2× band padding before squaring, the spectral-bin criterion N_λ ≥ 4·ΔOPD_max/l_c, and a Jones-on-Stokes reduction option for partially polarized light",
+    "why": "Every grid, padding and bin choice becomes auditable against its physical criterion. Squaring aliasing is guarded explicitly"
+   },
+   {
+    "from": "C-mvp-scope",
+    "idea": "Micrometres internally, backed by the measured float32 underflow of α² and a⁶ for sub-100-nm particles in SI metres",
+    "why": "Fixes A's only numerics error. Relative precision is unchanged, and small-particle darkfield/iSCAT quantities no longer flush to zero"
+   },
+   {
+    "from": "C-mvp-scope",
+    "idea": "Place the projection/thin screen at the object's centre plane z_c and back-propagate. Pin the Mie far-field → angular-spectrum map A = −S/(2π k_m k_z)·e^{−i(k−k_in)·r_p} with a direct-summation unit test",
+    "why": "Makes projection the exact one-slice limit of multislice, and fixes the one normalization every Mie/pupil pipeline gets wrong silently"
+   },
+   {
+    "from": "C-mvp-scope",
+    "idea": "Grid-snapping of source directions as the declared fallback, with the angular error λ/(nL) reported, wherever the analytic PlaneWaves background is not available (third-party operators, to_sampled())",
+    "why": "A's to_sampled() fallback otherwise reintroduces the 8–10 % seam error on off-grid tilts"
+   },
+   {
+    "from": "C-mvp-scope",
+    "idea": "The ladder expressed as nested pairs with regime-bounded tolerance targets printed by explain(): dipole↔Mie at x<0.3, projection↔multislice at d≤DOF/4, voxel-sphere multislice↔Mie at Δn≤0.05, Abbe K↔K_ref",
+    "why": "Keeps the fidelity ladder physically meaningful: each lower tier is checked against the tier it is a true limit of"
+   },
+   {
+    "from": "D-learnable-pipelines",
+    "idea": "Validity reported as a probability over a validation draw of the scene distribution, with the option to route per instance (for example, dipole for small spheres and Mie for large ones, under masks)",
+    "why": "Random scenes straddle validity regimes. Bounds-only validity is too coarse and forces the worst-case solver on a whole population"
+   },
+   {
+    "from": "D-learnable-pipelines",
+    "idea": "ROI size derived from defocus bounds, NA and λ_max, with a global-spectrum fallback and a ladder test of sparse ROI against global spectrum",
+    "why": "Measured 5.7 % relative-L2 wrap error with energy conserved, so the error is invisible to sum checks. This is a sampling-correctness rule, not a performance knob"
+   },
+   {
+    "from": "D-learnable-pipelines",
+    "idea": "Estimator defaults taken from measurement (scaled straight-through Poisson; straight-through Concrete at τ=0.5), and a statistical estimator test suite covering variance-sensitive losses",
+    "why": "Noise physics must stay learnable: plain straight-through silently zeroes noise-level gradients, and soft Concrete at τ=1 has the wrong sign"
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "The gradient audit as a plan-time error: a learnable reaching a zero-gradient converter such as a hard mask refuses to compile and names the fix",
+    "why": "Makes 'differentiable' a checked physical-discretization property, which A only declares through grad_quality"
+   }
+  ],
+  "key_decision_verdicts": [
+   {
+    "decision": "Units",
+    "verdict": "Micrometres internally, as in B, C and D. SI metres at the DT boundary only. complex64/float32 by default, fp64 for special functions and phase construction.",
+    "rationale": "float32's exponent range, not its relative precision, is what matters: α² for a 10 nm particle is ~1e-47 in m⁶ and underflows (C measured this), and a⁶ darkfield terms underflow too. A's scale= fixes optimizer conditioning but not range."
+   },
+   {
+    "decision": "Central interchange representation",
+    "verdict": "A two-port angular spectrum in the medium basis before the pupil. It has a dense grid form and a sparse, lazily evaluated per-object form (B/D ObjectSpectra), and it carries the unscattered/reference light as an analytic PlaneWaves background beside the sampled scattered part (A).",
+    "rationale": "The objective only sees NA-limited propagating waves, so the angular spectrum is grid-agnostic. The analytic zero order makes darkfield, phase rings, iSCAT attenuation and off-grid tilts exact, and it gives float32-safe interference (measured 2e-7 vs 8.7 %). Two ports are required for epi/iSCAT. Apodization must be defined relative to this density: ×√cosθ on collection with no extra Jacobian."
+   },
+   {
+    "decision": "Fidelity ladder semantics",
+    "verdict": "Use per-implementation 'approximates' edges with regime-bounded convergence tests (A/C/D). Do not use a total-order lattice (B).",
+    "rationale": "The true nestings are: projection is BPM's thin limit; Born ⊂ SSNP ⊂ MBS in the weak limit; BPM ≈ SSNP in the paraxial limit; dipole is Mie's x→0 limit; projection is Mie's anomalous-diffraction limit. Born is not a limit of BPM, and it beats BPM for weak high-angle scattering and backscatter. A total order can force a less accurate solver."
+   },
+   {
+    "decision": "Planner",
+    "verdict": "Rule-based and run at plan time, with validity over bounds plus probability from a validation draw (D). Per-object-group selection with B's partition pass. Fast paths are theorem-guarded rewrites (A). Cost only ranks candidates that are already valid. No Cascades search in v1.",
+    "rationale": "Validity decides physical correctness; cost should only order admissible choices. The search space is small, so a rule table plus explain()/why() is transparent enough. Exhaustive cost search adds opacity without improving the physics."
+   },
+   {
+    "decision": "Parameter system",
+    "verdict": "Own minimal Param/Trace/ParamStore on torch.distributions, with plates, per-site estimators, handlers and stored base noise (D). No Pyro or tensordict in core.",
+    "rationale": "All four agree. Storing base noise also enables common-random-number calibration."
+   },
+   {
+    "decision": "Module vs functional",
+    "verdict": "Functional physics core plus a single Simulator nn.Module shell. Specs are frozen dataclasses.",
+    "rationale": "Unanimous. It keeps kernels gradcheck-able and lets adjoint/reversible formulations be verified in isolation."
+   },
+   {
+    "decision": "Sparse vs dense",
+    "verdict": "Both first-class, chosen by the planner per group. Coherent contributions sum in the angular domain on top of the analytic background. Incoherent contributions sum in intensity. ROI size comes from bounds, with a global-spectrum fallback.",
+    "rationale": "Summing coherent spectra before one inverse FFT gives exact cross terms. Emitters must never be voxelized, since that loses sub-voxel position and gradients. ROI wrap is a correctness issue (5.7 %)."
+   },
+   {
+    "decision": "Polarization",
+    "verdict": "The P axis is always present with size 1, 2 or 3. Vectorial optics ship in v1 (A/B/D), scalar is the default below NA/n ≈ 0.7 without fixed dipoles or polarization optics, and unpolarized light is 2 modes.",
+    "rationale": "Fixed-dipole and high-NA system identification need vectorial optics (≈40 nm bias otherwise), and the GPU overhead is small. C's scalar-only v1 is acceptable only as an MVP, and the axis must exist from day one."
+   },
+   {
+    "decision": "Multi-wavelength grids",
+    "verdict": "One spatial grid for all λ at the sample and detector planes. Dense path: λ-common FFT frequency grid with per-λ pupil radius. Sparse path: λ-common pupil grid in u = λk⊥ with per-λ MFT onto a common ROI (A). Separate excitation and emission spectra.",
+    "rationale": "Avoids Chromatix's per-λ dx leak and makes spectral sums plain weighted reductions."
+   },
+   {
+    "decision": "Coherence representation and stochastic Abbe",
+    "verdict": "Coherent-mode sets with coherence groups (A's AngularSource); no mutual-intensity type. Data-generation tiers use deterministic quadrature (K≈8–25) or SOCS when optics are fixed and the sample is thin. Stochastic Abbe is reserved for gradient estimation and fitting, or for large K.",
+    "rationale": "Verified: K=2 deviates 4.0 % RMS from exact Abbe, with structured fringes, against 1.0 % shot noise at 1e4 photons/px (K=4: 2.8 %, K=8: 1.8 %). Unbiasedness in expectation does not make individual images physical."
+   },
+   {
+    "decision": "Single-mode draft illumination",
+    "verdict": "The coherent single mode must lie on the source support: one point on the annulus, or a symmetric pair. It must not be the on-axis centroid (A, C).",
+    "rationale": "Verified for phase contrast: on-axis gives object contrast −0.31 against +5.9 for the full annulus (wrong sign), while one on-annulus point gives +9.2. For a darkfield annulus with NA_c > NA, an on-axis mode puts the zero order inside the pupil."
+   },
+   {
+    "decision": "Reflection / iSCAT",
+    "verdict": "Two ports in v1, with the analytic LayeredMedium Fresnel reflection as the reference plus dipole/Mie backscatter (A). Particle–interface coupling in v2.",
+    "rationale": "The reference in iSCAT is the coverslip reflection, and the illumination and backscatter cross the interface. C's and D's homogeneous iSCAT-lite gets the λ/(2n) contrast period but not physical amplitudes or phases."
+   },
+   {
+    "decision": "Mixed-sample coupling in v1",
+    "verdict": "C0 in v1 with B's host-index rule, cut-out-and-fill, and proximity/containment warnings. C1 march injection lands as soon as the z-march exists (v1.x), injecting at the particle exit plane.",
+    "rationale": "Superposing fields without these rules double-counts material and uses the wrong relative index for embedded beads. C1 is cheap (one FFT per injection plane) and captures cell-induced aberration."
+   },
+   {
+    "decision": "Dense interaction grid sampling",
+    "verdict": "Derive the march or volume grid from the interaction's own scattering bandwidth: n_m/λ by default at accurate tiers, or a declared cutoff with band-limited voxelization and a validity report of the dropped band. Keep this separate from the detection-intensity Nyquist λ/(4NA), and crop to the pupil before detection.",
+    "rationale": "All four proposals derive the grid from detection NA. At low NA, high-angle scattering that multiple scattering can return into the pupil is truncated or aliased."
+   },
+   {
+    "decision": "Dynamics",
+    "verdict": "Frames on an acquisition axis and exposure sub-steps as summed modes in v1 (A, B, D); biology stays in plugins.",
+    "rationale": "Motion blur is physically an incoherent sum within one exposure, so it belongs on M. Folding time into batch (C) cannot express it."
+   },
+   {
+    "decision": "z-axis convention",
+    "verdict": "+z is the propagation direction toward the detection objective, with interfaces at explicit z (A/B). Avoid D's '+z into the sample' with per-solver frame flips.",
+    "rationale": "One propagation-aligned frame keeps ports, propagator signs and the epi/transmission geometries consistent. Frame flips are a known source of sign bugs."
+   },
+   {
+    "decision": "Dependencies",
+    "verdict": "Core is torch + numpy. GPL codes (PyMieDiff, holopy, psfmodels) are isolated test oracles only. MIT psf-generator may be vendored.",
+    "rationale": "Unanimous; MIT licence compatibility with DeepTrack2."
+   }
+  ],
+  "errors_to_fix": [
+   "Apodization convention (A §4.1, B §4.1, D §4.1): 'Apodization is √cosθ for focusing and 1/√cosθ for collection, plus the 1/k_z Jacobian' is applied to an angular-spectrum currency. On an angular-spectrum density sampled uniformly in k⊥, collection multiplies by √cosθ and focusing by 1/√cosθ, with no extra Jacobian. The 1/√cosθ (collection) and √cosθ (focusing) factors apply to far-field or reference-sphere amplitudes such as Mie S1/S2 or dipole patterns. The 1/k_z Jacobian appears only when a dΩ integral of far-field amplitudes is converted to a k⊥ sum. Applying both to an angular spectrum is off by cos²θ, which is ≈6.6× in amplitude at the pupil edge for NA 1.4 in oil. Pin the rule with a power test: ∫PSF equals (1−cosθ_max)/2 for an isotropic emitter.",
+   "Single-mode draft illumination (A §5.2 koehler.single 'centroid'; C §5.4 draft '1 (on-axis)'; B and D unspecified): for annular sources the centroid is outside the source support. Measured phase-contrast object contrast is −0.31 on-axis, +5.9 for the full annulus and +9.2 for one on-annulus point, so the sign is wrong and the magnitude 20× too small. For a darkfield annulus with NA_c > NA, the on-axis zero order enters the pupil and the image becomes brightfield. The single mode must be drawn on the source support.",
+   "Stochastic Abbe as a data-generation tier (D §5.5 'fast: stochastic Abbe K = 2'; also the claim in A, B and brief 05 that the residual 'hides under shot noise'): it is unbiased only in expectation. Measured deviation from exact Abbe is 4.0 % RMS at K=2, 2.8 % at K=4, 1.8 % at K=8 and 0.9 % at K=32, with structured coherent fringes, against 1.0 % shot noise at 1e4 photons/px. Use it for gradient estimation and fitting, and use deterministic quadrature or SOCS for training images.",
+   "Units rationale (A §13.1): 'float precision is relative, so metres cost nothing numerically' ignores float32 exponent range. α² for a 10 nm particle (~1e-47 m⁶) and a⁶ for 20 nm particles underflow. Switch to µm.",
+   "Non-nested ladder (B §5.7; A §5.9 wording): B's total order I1 < I2 Born/Rytov < I4a BPM < I4b SSNP < I5 and 'projection < dipole < Mie' are not physical limits. BPM's weak limit is Born with paraxial obliquity (k_m in place of k_z) and no backscatter, so Born is more accurate than BPM for weak high-angle scattering. Dipole and projection are limits in opposite regimes: x→0, and x≫1 with m→1. Encode pairwise approximates-edges instead: projection⊂BPM, Born⊂SSNP⊂MBS, BPM≈SSNP (paraxial), dipole⊂Mie (x→0), projection⊂Mie (anomalous diffraction).",
+   "Off-grid tilted plane waves (B §5.3, D §5.3): Köhler points, FPM/IDT LEDs and oblique illumination sampled on periodic grids cause seam ringing, which A measured at 8–10 % rms image error. Neither B nor D addresses it. Carry the zero order analytically (A) or snap to the grid with a declared angular error λ/(nL) (C).",
+   "Dense interaction sampling (A §5.7 step 5, B §4.2, C §4.2, D §4.2): march grids are derived from detection Nyquist λ/(4NA). At low NA the grid band 2NA/λ < n_m/λ truncates or aliases high-angle scattering that multiple scattering can return into the pupil, and phase-screen harmonics wrap. Derive the interaction grid from a declared scattering bandwidth (n_m/λ by default at accurate tiers), use band-limited voxelization, and report the dropped band.",
+   "Cross-tier radiometry (C §4.1): the PSF is normalized to collection efficiency only in 'accurate' and to 1 in draft/standard, which is ~3× apart at NA 1.4. Lower tiers are then not limits of higher ones. Adopt B's consistency contract.",
+   "iSCAT-lite (C §5.3, D M2): a homogeneous medium with constant r = 0.067 omits the Fresnel transmission of illumination and backscatter through the coverslip, r_s/r_p versus angle, and the index change. Label it an approximation tier and provide the LayeredMedium Fresnel port (A) as the physical tier.",
+   "Mis-stated validity criteria (C §5.6): 'multislice dz > λ_m/2 → raise' contradicts the λ_m/2…λ_m range, since BPM slices are limited by per-slice phase Δn·k0·Δz and intra-slice diffraction. 'Projection: phase > 1 rad' confuses the weak-object/Born limit with projection validity, which is thickness versus DOF n·λ/NA². B §5.3 also restricts WOTF to thin samples, whereas a 3D WOTF is valid for thick weak objects.",
+   "Bead extent in emission (B §9b): the bead should not be folded as |F_ball(k)| into the sparse path. Incoherent bead extent is the intensity PSF convolved with the signed 3D ball form factor. It is harmless at 100 nm, where the first zero lies beyond the OTF cutoff, but wrong in general.",
+   "C1 injection plane (B §5.6): the Mie outgoing angular spectrum is an exact representation only for z > z_p + a. Inject at the particle exit plane, or consistently at a back-propagated virtual plane, not at the centre plane followed by marching through host-filled slices.",
+   "Diagonal-everywhere claim (A §1 principle 1): field-dependent aberrations, non-telecentric vignetting and light-sheet frames are neither space- nor angle-diagonal. The Filter category contract needs a space-variant member (per-object pupil, low-rank product convolution) from day one, even if it is implemented only on the sparse path in v1."
+  ]
+ },
+ {
+  "lens": "Engineering feasibility, performance and maintainability. Can 1-3 developers build it? Is the scope realistic? Are the GPU memory and speed strategies credible against the measured numbers? Is it debuggable and testable? What are the dependency risks, how costly are later changes, and which abstractions are premature or missing? I added three measurements of my own on the RTX 3090 with torch 2.14 (scripts in scratchpad/judge_eng/).\n(1) bpm_check.py, BPM at 256² × 64 slices. Forward only, inference mode, B=64: 47.5 ms with precomputed slices (1347 img/s, 0.742 ms per slice step) versus 289.5 ms with procedural slices of 6 soft ellipsoids (221 img/s). With gradients at B=8, naive autograd peaks at 6.55 GiB (134 ms) and procedural slices plus non-reentrant checkpointing every 8 slices peak at 0.90 GiB (182 ms). The gradients are bit-identical.\n(2) mie_modes.py, Mie-in-pupil at B=64, 5 spheres, 256². One mode: 3202 img/s on the full grid, 5020 img/s when evaluated on pupil-support samples only. Seven Köhler modes: 842 img/s on the full grid, 2296 img/s on support only.\n(3) subnormal.py and propC/units_check.py. In fp32 with SI metres, (1e-7)^6 = 1.0005e-42 is subnormal but is not flushed on CPU or CUDA. alpha² for a 10 nm particle underflows to exactly 0, while in µm it is 1.37e-11.",
+  "scores": [
+   {
+    "proposal": "A-field-operators",
+    "physics_generality": 9,
+    "fidelity_mechanism": 8.5,
+    "feasibility_and_scope": 4,
+    "performance_memory": 8,
+    "learnability_ml_usability": 7.5,
+    "extensibility_modularity": 9,
+    "deeptrack_integration": 7.5,
+    "overall": 6.5,
+    "strengths": [
+     "§4.7 gives the most rigorous and minimal operator basis: 6 categories and 4 combinators, plus a coverage table showing every application family expressed in it. §7.5 then shows that contributions multiply rather than add.",
+     "It backs its central decisions with its own measurements (§0 table). An off-grid sampled tilt gives 8-10% rms seam error. Sampled weak interference gives 8.7% error at 5e-6 contrast, against 2e-7 with an explicit cross term. TF32 degrades complex MFT to 4.4e-4, against 2.9e-7 with IEEE. The sparse MFT renders 27k-67k frames/s.",
+     "The testing strategy is excellent (§11): an import-linter for layering, a plugin conformance suite (gradcheck in c128, linearity, energy conservation, convergence to the declared `approximates` target), convergence tables that set the validity thresholds, and planner-changelog snapshot tests.",
+     "The planner is rule-based, not a search (§5.7). It is cached, has explain() and run(until=), a runtime bounds guard, and the legacy_dt preset comes with a documented diff table (§10).",
+     "Memory strategy is taken straight from the brief 07 measurements (§8.1): chunked checkpointed mode sums, procedural slices, IEEE matmul and no_autocast wrappers, and 2·3·5·7-smooth static grids."
+    ],
+    "weaknesses_or_errors": [
+     "The scope is not feasible for 1-3 developers. The v1 feature list (§2) includes vectorial 6-basis, Transduce (TIRF, SIM, light sheet, confocal/ISM/2P), Born/Rytov with ±z ports, BPM with both reversible and segmented adjoints and an in-loop VJP, SOCS/WOTF rewrites, layered Fresnel, iSCAT with a physical reference, CRLB, the learn toolbox and the DT adapter. §12 budgets 35 weeks at 1-2 FTE for all of it, and M3 alone packs a voxelizer custom autograd, Born, BPM adjoints and 4 presets into 7 weeks.",
+     "The dual-part Field (PlaneWaves ⊕ sampled, §4.3) doubles the behaviour every operator must implement and test, including the BPM march. The measured accuracy gain is real, but in v1 it only matters at detection, which an analytic reference can cover (as C does). §14 risk 1 itself admits the per-operator cost.",
+     "The claim that metres internally 'cost nothing numerically' because float precision is relative (§13.1) is wrong for fp32 range. alpha² of a 10 nm particle underflows to 0 in metres, and a⁶ lands in the subnormals. It is mitigated only where fp64 is used.",
+     "A reversible and segmented custom adjoint 'from day one' (§8.1) is not needed to escape the volume wall. Procedural slices with plain checkpointing already give 6.55 → 0.90 GiB with identical gradients (my measurement).",
+     "The BF-tracking target of ≥2k frames/s with 7 Köhler modes (§8.3) is met only with pupil-support-only evaluation (2296 img/s). The planner listing in §5.7 evaluates on the full FreqGrid 224², which measures 842 img/s.",
+     "The planner does more than the rules suggest. Graph expansion, planner-inserted basis changes (FFT/MFT/CZT), theorem rewrites, fusion and a Dijkstra search over lowerings together amount to a small compiler to build and debug."
+    ]
+   },
+   {
+    "proposal": "B-scene-planner",
+    "physics_generality": 8.5,
+    "fidelity_mechanism": 8,
+    "feasibility_and_scope": 3.5,
+    "performance_memory": 7.5,
+    "learnability_ml_usability": 7.5,
+    "extensibility_modularity": 7,
+    "deeptrack_integration": 8,
+    "overall": 5.5,
+    "strengths": [
+     "Debuggability is the best of the four (§5.12, §11.4): explain/why/diff, plan.graph, run(until=, taps=), profile against predictions, golden plan snapshots for about 30 canonical scenes, hypothesis property tests on the planner, and frozen plans serialised with datasets.",
+     "Guards run on the GPU and report through a non-blocking copy checked every K batches, so there is no host sync on the hot path (§5.8). There is also a plan-time gradient audit in which a zero-gradient path is a compile error (§6).",
+     "Sparse coherent objects are evaluated only on pupil-support k-samples (§8 item 4). I measured this at 2.7× faster with 7 modes (842 → 2296 img/s).",
+     "It measures the sparse/dense emitter crossover at 300-500 emitters per image [B-M] and adds the cut-out-and-fill rule for analytic objects embedded in voxel hosts (§5.6), a real correctness detail for mixed samples.",
+     "It uses µm units, an explicit truncation requirement for random sites that affect shapes, and frozen deterministic tie-breaking."
+    ],
+    "weaknesses_or_errors": [
+     "A Cascades/Volcano cost-based search with properties, enforcers, memoisation, 10 passes, a fidelity lattice with join/meet, an escalation rule, per-device cost calibration and error models (§5.7-5.10) is exactly the premature IR that brief 09 anti-pattern 2 warns against. v1 has only 2-3 kernels per slot, and every plugin author must learn requires/delivers properties and enforcer costs.",
+     "It claims 'a wrong cost model only makes a plan slower, never wrong' (§5.10), which is false. Cost chooses among valid implementations with different approximation errors (strata vs sparse emitters, stochastic vs quadrature Abbe, the escalation rule at 'balanced'). Device-calibrated costs therefore change the numerics across machines, and gradient-set-dependent planning makes train and eval images differ, as §14 risk 9 concedes.",
+     "The scope is not feasible. v1 includes SSNP, C1 injection, P2 partition with cut-out-and-fill, WOTF, vectorial/Jones, spline PSF import, two-stage modalities and time. M0 (4 weeks) must deliver L0/L1 plus all planner passes P0-P9 with explain/why/diff.",
+     "The illustrative numbers are inconsistent with the measurements. The explain listing in §9(a) shows a Mie stage of 1.1 ms for B=64 with n_max 37, while C measured 22.7 ms, I measured 12.7-20 ms, and the coefficient recurrence alone is launch-bound at about 8.6 ms. The padding of '32 px' should be 6.6·0.75 + 2·0.532/0.8 = 6.28 µm, which is about 39 px at 162.5 nm.",
+     "§13.1 says a⁶ = 1e-42 in metres is 'subnormal and flushed'. It is subnormal but not flushed on CPU or CUDA (I measured 1.0005e-42). The conclusion in favour of µm is still right.",
+     "Extensibility is weighed down by the planner. The contract for adding an implementation is heavier than in A, C or D."
+    ]
+   },
+   {
+    "proposal": "C-mvp-scope",
+    "physics_generality": 6.5,
+    "fidelity_mechanism": 6.5,
+    "feasibility_and_scope": 9,
+    "performance_memory": 8,
+    "learnability_ml_usability": 7,
+    "extensibility_modularity": 7.5,
+    "deeptrack_integration": 8.5,
+    "overall": 8,
+    "strengths": [
+     "It is the only proposal whose scope a 2-person team can plausibly ship. §2.5 lists the abstractions it deliberately will not build, each with its seam kept open. Every v2 item has a named application trigger. The team split is explicit (§3.3).",
+     "It freezes the costly-to-change seams in M0 (§1.2): units, the fixed-rank layout [B,M,W,P,Y,X] with P always present, spec→trace→render, the two currencies, Param semantics and the detector API. Everything behind those seams may stay naive.",
+     "Its measured throughput table (§8.1, W1-W5 plus Abbe) is reproducible. I re-measured W5 and got 6.55 vs 0.90 GiB, matching C's 6.5 vs 0.88. It measures batching (33× for Mie) and Mie CPU vs GPU placement. It correctly concludes that the custom multislice adjoint can wait for ODT, because procedural slices plus checkpointing already avoid the volume wall.",
+     "It chooses µm with verified evidence (alpha² = 0 in fp32 metres; an Adam step of 1 cm per step in metres), and backs this with a layering test and grep bans on torch.poisson and global RNG (§3.1, §11.8).",
+     "The DT integration is well staged (§10): a drop-in L1, a batched L2 (33×), a learnable L3 via gs.Random as a DT property, a semantics mapping table, and the adapter early (M2) to validate the seam before the coherent work.",
+     "The fidelity mechanism is a readable knob dataclass with three presets, a rule table, validity from bounds, compare(), and tolerance tables printed by explain() (§5.4-5.7)."
+    ],
+    "weaknesses_or_errors": [
+     "v1 is scalar-only (§13.7). High-NA bead-stack system ID and fixed-dipole SMLM need vectorial optics (brief 08 marks it M for system ID), and A measured vectorial at only about 2.5× scalar on the sparse path. It should land in v1.x, not v2.",
+     "Time is folded into batch_shape and photophysics is deferred (§13.9). Label shape contracts for frames should be fixed in M0, as D argues.",
+     "PupilSpectrum carries a single `direction` (±1) per spectrum (§4.3), so it cannot hold T and R contributions at once. A per-contribution port tag is needed.",
+     "Reference.k_in is snapped to the k-grid. That is fine for Köhler quadrature, but a user-specified oblique angle then carries about λ/(nL) error (A measured 6-8 mrad at a 25.6 µm FOV). This must be documented, or the FOV padded.",
+     "It has no user-facing gradient report, no stored base noise for common-random-number replay, and no fused sampler. It plans no CUDA-graph accelerator before v1.0, even though graphs are the only Windows-friendly accelerator (2.9× per brief 07; C's own measurement takes the Mie coefficients from 8.6 to 3.3 ms).",
+     "The 20-week estimate for 2 developers is probably 1.3-1.5× optimistic, but its ordering by risk is right.",
+     "The Mie placement rule (fp64 on CPU below 2·10⁴ P·n_max, §13 row 13) puts host-device transfers in the render path, which conflicts with later CUDA-graph capture. n_max must come from radius bounds; the W3 benchmark derives it with x.max().item(), a host sync and a value-dependent shape."
+    ]
+   },
+   {
+    "proposal": "D-learnable-pipelines",
+    "physics_generality": 7.5,
+    "fidelity_mechanism": 7.5,
+    "feasibility_and_scope": 5,
+    "performance_memory": 7.5,
+    "learnability_ml_usability": 9.5,
+    "extensibility_modularity": 8,
+    "deeptrack_integration": 9,
+    "overall": 7,
+    "strengths": [
+     "It measures the estimator defaults instead of assuming them (Exp B). Plain straight-through Poisson gives exactly 0 on a variance-sensitive loss; scaled straight-through is unbiased. Soft Concrete at τ=1 gives the wrong sign; straight-through Concrete at τ=0.5 gives -465 against a true -473. It also shows score-function variance. These become concrete defaults and a statistical estimator test suite (§11.4).",
+     "It proves the headline feature end to end (Exp C): a LogNormal size distribution learned from unlabeled images recovers the median to 0.7% at 6 ms per step.",
+     "Exp A shows ROI truncation as a silent correctness bug: 5.7% error at a 32² ROI, invisible to energy checks. That justifies deriving the ROI from bounds in the planner. Exp D measures the fused sampler at 1.48 → 0.17 ms, which matters when the fast render itself takes about 1.25 ms.",
+     "It stores base noise in the Trace (§6.5), enabling common-random-number replay and deterministic L-BFGS / sample-average-approximation fitting at negligible memory cost. gradient_report combines static path tags with a dynamic probe (§6.3).",
+     "It is ML-practical (§8.3): CUDA graphs as the Windows-friendly v1 accelerator, side-stream prefetch, ReuseNoise(k), MultiView paired rendering, and interventions.",
+     "Its DT path (§10) is honest, with a measured adapter ceiling of about 0.3 ms/image resolve and so about 3k img/s, followed by the from_deeptrack bridge with a dt.dist proposal that brings learnable distributions into DT."
+    ],
+    "weaknesses_or_errors": [
+     "The scope is broad. The prob layer has 9 Param kinds, a compiled sampler with CUDA graphs and counter-based RNG. v1 also includes vectorial, Born/Rytov, BPM with reversible and segmented adjoints plus an in-loop VJP, the whole fit subsystem (likelihood, Laplace, CRLB, distribution matching, surrogates, residual slots), fidelity schedules, randomised fidelity, validity-as-probability, dynamics and two-stage presets. The honest 47-week roadmap at 2-3 FTE is over 2 person-years before 1.0, with the stated risk of the prob layer growing into an ad-hoc PPL.",
+     "The BPM throughput target of ≈10³ img/s at 256² × 64 slices (§8.1) holds only for precomputed slices (I measured 1347 img/s). Procedural slice generation dominates: 221 img/s forward with 6 unculled soft ellipsoids. The rasteriser, not the FFT, is the hot path.",
+     "§13.1 says that in metres 'Adam's ε (1e-8) is larger than typical gradients' natural scale'. That is backwards: gradients with respect to a metre-valued parameter are about 10⁶× larger per unit, so ε becomes negligible. The step-size argument is correct.",
+     "Its z convention (+z into the sample, away from the objective, §4.1) differs from the other three and needs a planner-inserted 'frame flip' for solvers, which is an extra surface for sign bugs.",
+     "Randomised fidelity (a OneOf over plans), fidelity schedules and validity-as-probability from validation draws are premature for v1.",
+     "Like A and B, it treats the custom reversible/segmented adjoint with in-loop VJP as the key v1 memory decision, when procedural slices plus checkpointing already suffice (6.55 → 0.90 GiB)."
+    ]
+   }
+  ],
+  "recommended_base": "C-mvp-scope",
+  "grafts": [
+   {
+    "from": "B-scene-planner",
+    "idea": "Evaluate sparse coherent object spectra (Mie, dipole) only on the k-samples inside the pupil support. Scatter them into the k-grid and run one inverse FFT per image.",
+    "why": "I measured 842 → 2296 img/s at 7 Köhler modes and 3202 → 5020 img/s at 1 mode (B=64, 5 spheres, 256²). This is what makes BF-tracking-with-partial-coherence targets reachable without Triton."
+   },
+   {
+    "from": "D-learnable-pipelines",
+    "idea": "Adopt the measured estimator defaults: scaled straight-through Poisson, straight-through Concrete at τ=0.5 for learnable presence, and score function with a leave-one-out baseline as the unbiased fallback. Ship the Exp-B-style statistical estimator test suite, which flags plain straight-through and soft Concrete as biased.",
+    "why": "Plain straight-through silently gives exactly 0 on noise-level losses, and soft Concrete at τ=1 has the wrong sign. These are the silent failures that break the user's key requirement of learnable generation parameters."
+   },
+   {
+    "from": "D-learnable-pipelines",
+    "idea": "Derive the ROI size for sparse emitters and particles from defocus, NA and λ bounds, and add a ladder test comparing the sparse ROI against the global spectrum.",
+    "why": "A 32² ROI gives 5.7% error that energy checks cannot see. This is a correctness rule, not an optimisation."
+   },
+   {
+    "from": "D-learnable-pipelines",
+    "idea": "Store base noise ε per pathwise site in the Trace, and support replay(trace, mode='noise') for common-random-number fitting.",
+    "why": "It costs only [B,N] per site, and it turns stochastic calibration into deterministic L-BFGS / sample-average-approximation fitting with lower-variance gradients."
+   },
+   {
+    "from": "D-learnable-pipelines",
+    "idea": "Offer gradient_report(), combining static gradient-quality tags with a dynamic probe, as both a user tool and a CI gate. Pair it with B's plan-time refusal of zero-gradient paths.",
+    "why": "C only has a CI non-zero-gradient test. Users need to see which estimator each learnable relies on and where the gradient is zero, for example a hard annulus."
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "Run bound guards as GPU-side flag reductions copied non-blocking and checked one step later, with clamp as the default policy.",
+    "why": "It keeps shapes static while learnable distributions drift, with no host sync on the hot path. C's runtime 'spot check' needs this mechanism to avoid syncs."
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "Snapshot explain() output for canonical scenes as golden files, add hypothesis property tests for plan validity (inputs satisfied, static shapes, guards cover consumed bounds, deterministic output), and store frozen plans in dataset manifests.",
+    "why": "This makes planner behaviour changes reviewable as diffs and datasets regenerable. It is cheap insurance for maintainability."
+   },
+   {
+    "from": "A-field-operators",
+    "idea": "Ship a plugin/kernel conformance suite (complex128 gradcheck on tiny shapes, linearity in field, energy conservation for lossless samples, convergence to the declared reference kernel, validity/cost sanity) and enforce layering with import-linter.",
+    "why": "Every kernel, first-party or plugin, meets the same bar. This is essential for 1-3 maintainers accepting contributions."
+   },
+   {
+    "from": "A-field-operators",
+    "idea": "Wrap every MFT/CZT in an IEEE-fp32 matmul context and the whole simulator in no_autocast. Compute the interference cross term explicitly from an analytic background at detection. Reserve a Field.background slot so A's full PlaneWaves ⊕ sampled design can be added later without an API break.",
+    "why": "TF32 degrades complex MFT to 4.4e-4 (A measured). Sampled weak interference errs 8.7% at 5e-6 contrast, against 2e-7 with an analytic cross term. The slot keeps the seam open without v1 operator complexity."
+   },
+   {
+    "from": "A-field-operators",
+    "idea": "Provide a legacy_dt fidelity preset with a documented diff table against the physics defaults, used only for golden tests (DTGS121, DTEx203, DTEx205, DTEx252, DTGS106).",
+    "why": "This separates parity from architecture and makes every deliberate physics deviation (NA-truncated slices, additive overlap, issue #445 signs) explicit to DT users."
+   },
+   {
+    "from": "D-learnable-pipelines",
+    "idea": "Make CUDA-graph capture of static-shape inference plans (sampler plus render) the first accelerator, plus side-stream prefetch and ReuseNoise(k) in a GPU stream iterator.",
+    "why": "This is the only accelerator that works on Windows without Triton: 2.9× in brief 07, resolve 1.48 → 0.30 ms per D, and Mie coefficients 8.6 → 3.3 ms per C. It needs no compile dependency."
+   },
+   {
+    "from": "D-learnable-pipelines",
+    "idea": "Plates beyond per=, including Group(k) for k views of one sample, and hierarchical priors through nested distribution arguments. Fix a frame/T plate and label shape contracts in M0 even if photophysics comes later.",
+    "why": "Changing label shape contracts later touches every label renderer. Declaring the plate costs little now."
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "Cut-out-and-fill: when an analytic object (a Mie bead) sits inside a voxelised host, the host lowering renders host material in the bead's place, applied already under C0 superposition.",
+    "why": "C's v1 allows Mie spheres mixed with multislice cells (C0). Without this rule the bead's contrast is counted twice, as voxels and as a Mie field."
+   },
+   {
+    "from": "D-learnable-pipelines",
+    "idea": "Post-v1 from_deeptrack bridge with a dt.dist proposal, and publish the measured adapter ceiling (about 0.3 ms/image resolve).",
+    "why": "It gives DT users a path from lambda-based properties to learnable, natively batched plans (10⁴-10⁵ img/s) without a DSL rewrite. The user is a DT core developer, so co-design is feasible."
+   },
+   {
+    "from": "judge measurement (applies to all)",
+    "idea": "Planner rule for dense coherent volumes: in inference mode, pre-rasterise slices once with bbox-culled patches, and only regenerate procedural slices inside checkpointed segments when gradients are required.",
+    "why": "Procedural slice generation dominates forward cost (289.5 ms vs 47.5 ms for 64 images at 256² × 64 slices). Materialising the volume in inference mode costs about 1 GiB at this size."
+   }
+  ],
+  "key_decision_verdicts": [
+   {
+    "decision": "Internal length units",
+    "verdict": "Micrometres internally (B, C, D), with SI metres and pixels converted only at the DT adapter and I/O boundary. A's choice of metres is rejected.",
+    "rationale": "I measured that alpha² of a 10 nm particle is exactly 0 in fp32 metres (1.37e-11 in µm) and that a⁶ lands in the subnormals with about 3 significant digits. Adam steps are in parameter units (1 cm per step in metres). A's Learnable(scale=) fixes optimisation but not fp32 range in paths that are not fp64. One boundary conversion in the adapter is cheap."
+   },
+   {
+    "decision": "Precision policy",
+    "verdict": "Consensus. Fields are complex64/float32. fp64 is used for special-function recurrences, phase-argument construction (carrier-subtracted, reduced mod 2π) and gradcheck. complex32, fp16 and bf16 are banned. Everything runs under no_autocast, with IEEE-fp32 matmul enforced on MFT/CZT. Require torch>=2.9 for the fp32_precision API (pyproject currently pins >=2.8).",
+    "rationale": "Brief 07 measured complex32 producing NaN, complex128 at 7.5× slower, and a 1.6e-3 error without carrier subtraction. A measured TF32 degrading complex matmul to 4.4e-4."
+   },
+   {
+    "decision": "Central interchange representation",
+    "verdict": "C's two currencies as the v1 implementation. The coherent currency is the scattered angular spectrum on one λ-common k-grid, carrying an analytic reference and an explicit cross term at detection. The incoherent currency is irradiance. Amendments: a per-contribution port tag (T/R) instead of a single direction field; sparse objects evaluated only on pupil-support samples (from B); a reserved Field.background slot so A's PlaneWaves ⊕ sampled can be generalised later. Do not ship A's dual-part field through every operator in v1.",
+    "rationale": "All four agree the pupil/angular spectrum is the lingua franca. A's analytic background is measured to matter only for weak interference, darkfield blocking and off-grid tilts. An analytic reference at detection covers the first two, and grid snapping or padding covers Köhler tilts, at a fraction of the per-operator complexity and testing cost."
+   },
+   {
+    "decision": "Planner sophistication and timing",
+    "verdict": "C's rule table plus validity from bounds plus explain(), run at Simulator construction, with grids fixed on the first call per batch bucket. Add B's GPU async guards, golden plan snapshots and frozen plans. Reject B's Cascades cost search and device-calibrated costs for v1. Any automatic choice between implementations with different approximation error must be deterministic, never cost- or device-dependent.",
+    "rationale": "v1 has 2-3 kernels per slot (brief 09 anti-pattern 2). B's own claim that cost 'only affects speed' is false once cost picks between strata and sparse emitters or between stochastic and quadrature Abbe. Device-dependent plans break cross-machine reproducibility and make train and eval images diverge."
+   },
+   {
+    "decision": "Parameter and trace system",
+    "verdict": "Our own minimal system of roughly 600-1500 LOC with no Pyro and no tensordict dependency. Leaves: Fixed, Learnable (O(1)-scaled, constrained), Random with Param-valued arguments, Derived by object reference, Count, and Choice. Handlers are call-scoped arguments or contextvars. Add D's plates and stored base noise in v1; add the fused/compiled sampler in v1.x when a benchmark triggers it.",
+    "rationale": "All four agree on avoiding Pyro's global state and a tensordict dependency, since torch releases every 6-8 weeks. D's measurements show resolve cost matters at fast tiers (1.48 ms against a 1.25 ms render) but can be solved either by fusion (0.17 ms) or by CUDA graphs (0.30 ms), so the fused sampler is not a v1 blocker."
+   },
+   {
+    "decision": "nn.Module vs functional core",
+    "verdict": "Consensus. Pure functional kernels on tensors with a static Grid, frozen-dataclass specs, and one Simulator nn.Module owning the ParamStore. User nn.Modules enter as ModuleParam/Voxels.from_fn.",
+    "rationale": "This keeps kernels gradcheck-able, CUDA-graph-capturable and compile-friendly (brief 07 §7.2) and avoids the mutable-module aliasing trap (brief 09 anti-pattern 13)."
+   },
+   {
+    "decision": "Sparse vs dense render paths",
+    "verdict": "Both in v1. Sparse emitters render via MFT onto an ROI whose size comes from bounds. Mie and dipole use 1-D S(θ) tables evaluated on pupil support. Dense uses per-z OTF for densities and projection or multislice for RI. Coherent contributions sum in k-space; incoherent ones sum in irradiance. Make the sparse/dense choice for emitters a deterministic rule (count threshold from B's measured 300-500 crossover), pinnable in Fidelity.",
+    "rationale": "This is consensus and measured: sparse runs at 27k-137k frames/s (A, C, D), 7-10× faster than full-frame, and D shows ROI sizing is a correctness issue."
+   },
+   {
+    "decision": "Polarization",
+    "verdict": "The P axis is present from M0 in every field type (all four agree). Scalar kernels ship first. The vectorial 6-basis dipole plus Jones pupil lands in v1.x, validated against psf-generator (MIT), not deferred to v2 as C proposes and not blocking v1.0 as A, B and D imply.",
+    "rationale": "Retrofitting the axis is the expensive part (brief 08 §2.13). Vectorial on the sparse path costs about 2.5× scalar (A: 5.9 vs 2.37 ms), and high-NA system ID and fixed-dipole SMLM need it (a 40 nm bias per Stallinga). The implementation risk lies in the conventions (apodisation direction, Fresnel), so it should follow a stable scalar core."
+   },
+   {
+    "decision": "Multi-wavelength grids",
+    "verdict": "Consensus. One object-space grid and one k-grid for all λ, with a per-λ pupil radius. The sparse path uses per-λ MFTs onto a common ROI. Λ is a weighted summed axis with chunked accumulation, and bin count is a fidelity knob.",
+    "rationale": "This avoids Chromatix's per-λ dx leak (brief 02) and turns spectral sums into a weighted reduction."
+   },
+   {
+    "decision": "Multislice memory strategy",
+    "verdict": "v1 uses procedural slices plus non-reentrant checkpointing (C). The reversible or segmented custom adjoint with in-loop VJP is a v2 optimisation triggered by ODT or by benchmarks, contrary to A, B and D.",
+    "rationale": "I measured 6.55 → 0.90 GiB at B8, 64 slices, 256², with bit-identical gradients and 1.36× time. That already removes the 16+16 GiB volume wall for parametric samples. Brief 07's adjoint adds about 1.6× further memory savings but is a custom autograd.Function taking Python callables: not vmappable and costly to test. For learnable voxel volumes the leaf and its gradient must be stored anyway."
+   },
+   {
+    "decision": "Time and dynamics",
+    "verdict": "Fix a frame/T plate and label shape contracts in M0. v1 ships a reparameterised Brownian/drift helper and expected-mode 2-state blinking. Stochastic photophysics, motion-blur sub-steps and bleaching come in v1.x/v2.",
+    "rationale": "D is right that changing label shape contracts later touches every renderer. C is right that frame rendering itself needs no new physics. This split costs little."
+   },
+   {
+    "decision": "Analytic zero-order background",
+    "verdict": "Analytic reference with an explicit |E_r|² + 2Re(E_r*E_s) + |E_s|² at detection (C and B). When a dense exit field exists it carries the reference. Köhler points are snapped to the grid, and user-specified oblique angles get FOV padding plus a documented error. Full propagation of the analytic background through all operators (A) is deferred behind a reserved slot.",
+    "rationale": "This keeps A's measured accuracy win for iSCAT and darkfield (8.7% → 2e-7) without doubling per-operator code in v1."
+   },
+   {
+    "decision": "Fidelity expression",
+    "verdict": "C's frozen knob dataclass with 3 presets (draft/standard/accurate) plus per-population overrides, a legacy_dt preset, compare(), and tolerance tables printed by explain(). Defer lattice join/meet (B), fidelity schedules and randomised fidelity (D), and error-target planning. A cross-fidelity surrogate gradient is fine as an opt-in v1.x feature.",
+    "rationale": "Discrete knobs, validity from bounds and measured ladder tables deliver the 'tunable fidelity' requirement. Everything more elaborate is premature before the ladder data exists."
+   },
+   {
+    "decision": "Accelerators",
+    "verdict": "No correctness dependency on torch.compile or Triton (all four agree). CUDA-graph capture of static inference plans is the first accelerator. Optional Triton kernels via torch.library.triton_op, each with a torch twin, come only when benchmarks demand them, starting with the rasteriser and phase-screen multiply.",
+    "rationale": "Triton is absent on this Windows machine and Inductor does not codegen complex ops. My BPM measurement shows procedural rasterisation, not the FFT, is the dominant cost (6× forward), so it is the first fusion target."
+   },
+   {
+    "decision": "Dependencies and licensing",
+    "verdict": "Consensus. Core depends on torch and numpy only. Optional extras: triton-windows, pytorch-finufft, deeptrack, deepinv, io. GPL codes (PyMieDiff, holopy, psfmodels, DECODE) are isolated test oracles only. MIT licence to match DT2. No pint, pydantic, pyro or tensordict in core.",
+    "rationale": "This avoids GPL contamination (brief 03 §4.9), keeps Windows users working without Triton, and reduces churn risk with torch's 6-8-week release cadence."
+   },
+   {
+    "decision": "DeepTrack2 integration",
+    "verdict": "Adapter first (C's M2 timing) at three levels: drop-in per-sample Features, BatchedDataset, and gs.Random/Learnable as DT properties. Then D's from_deeptrack bridge and dt.dist proposal post-v1. Document D's measured adapter ceiling of about 3k img/s.",
+    "rationale": "Early integration validates the seam before the coherent work multiplies the surface area. All four agree on option B from brief 01, and D's measurements set honest expectations."
+   },
+   {
+    "decision": "z-axis convention",
+    "verdict": "A single convention used everywhere, including inside solvers: +z points toward the detection objective (A, B, C), with the focal plane and coverslip at explicit z. Reject D's convention (+z into the sample) together with its planner-inserted frame flip.",
+    "rationale": "A flip inserted between the spec frame and the solver frame is a standing source of silent sign bugs (brief 05 §8.5)."
+   }
+  ],
+  "errors_to_fix": [
+   "A §13.1: 'float precision is relative, so metres cost nothing numerically' is false for fp32 range. alpha² of a 10 nm particle is 0 in fp32 metres (scratchpad/propC/units_check.py) and a⁶ = 1e-42 is subnormal. Use µm internally.",
+   "B §13.1: a⁶ = 1e-42 is subnormal but NOT flushed in torch 2.14 on CPU or CUDA; it evaluates to 1.0005e-42 (scratchpad/judge_eng/subnormal.py). The real issue is subnormal precision loss and underflow of higher powers, not flush-to-zero.",
+   "B §5.10: 'a wrong cost model only makes a plan slower, it can never make it wrong' is false. Cost selects among valid implementations with different approximation errors (strata vs sparse, stochastic vs quadrature Abbe, the escalation rule), so device-calibrated costs change the numerics across machines and between train and eval plans.",
+   "B §9(a): the illustrative plan shows a Mie stage of 1.1 ms for B=64 with n_max 37. Measured Mie-in-pupil is 12.7-22.7 ms for B=64 × 5 spheres, and the coefficient recurrence alone is launch-bound at about 8.6 ms. The padding '32 px' should be 6.6 µm · 0.75 + 2·0.532/0.8 = 6.28 µm, about 39 px at 162.5 nm.",
+   "D §8.1: 'Brightfield BPM 256² × 64 slices ≈ 10³ images/s' holds only with precomputed slices (measured 1347 img/s). With procedural slices of 6 soft ellipsoids it is 221 img/s forward (scratchpad/judge_eng/bpm_check.py). Rasterisation dominates, so bbox-culled patch rasterisation, or pre-rasterising in inference mode, is required.",
+   "D §13.1: 'Adam's ε (1e-8) is larger than typical gradients' natural scale' in metres is backwards. Gradients with respect to metre-valued parameters are larger by the unit factor (about 10⁶), which makes ε negligible. Only the step-size argument is valid.",
+   "A §8.1, B §8 and D §8.2 present the reversible/segmented custom multislice adjoint with in-loop VJP as necessary in v1 to avoid the 16+16 GiB volume wall. Procedural slices with standard non-reentrant checkpointing already do this: 6.55 → 0.90 GiB, identical gradients, 1.36× time (measured). Treat the custom adjoint as an optimisation; brief 07 notes such Functions taking callables are not vmappable.",
+   "A §8.3: the BF tracking target of ≥2k frames/s (256², 5 Mie particles, 7 Köhler modes) is not met by the full-grid evaluation shown in A's plan listing (measured 842 img/s). It is met only with pupil-support-only evaluation (2296 img/s, scratchpad/judge_eng/mie_modes.py).",
+   "C §4.3: a single `direction` field per PupilSpectrum cannot represent transmitted and reflected contributions at the same time. Tag the port per contribution.",
+   "C §4.4 and §4.3: snapping Reference.k_in to the k-grid is acceptable for Köhler quadrature, but for user-specified oblique plane waves it introduces an angle error of about λ/(nL) (A measured 6-8 mrad at a 25.6 µm FOV). Document it, or pad the FOV to meet a tolerance.",
+   "C §8.2 and §13 row 13: placing Mie coefficients on the CPU puts host-device copies and syncs in the render path, which conflicts with CUDA-graph capture. The W3 benchmark derives n_max with x.max().item(), a host sync and a value-dependent shape. n_max must come from radius bounds at plan time.",
+   "D §4.1: +z into the sample, with a planner-inserted frame flip for solvers, adds a sign-bug surface. Use one convention in the spec and in all solvers.",
+   "B §14 risk 9 and §5.8: gradient-set-dependent planning (train vs eval choosing, for example, SOCS vs Abbe) makes training and evaluation images differ. The default must be one plan unless the user explicitly requests otherwise.",
+   "Roadmaps: A (35 weeks, 1-2 FTE) and B (30 weeks, with the complete P0-P9 planner in a 4-week M0) are unrealistic for their v1 scope. D's 47 weeks at 2-3 FTE is honest but puts 1.0 more than 2 person-years out. Even C's 20 weeks for 2 developers should be budgeted at about 26-30 weeks."
+  ]
+ },
+ {
+  "lens": "ML usability, learnability and DeepTrack integration. How pleasant and powerful the API is for randomized, learnable training-data pipelines, calibration and sim-to-real, and inverse problems. Also covers correctness of the gradient estimators, batching semantics, label extraction, the migration path for DT2 users, and whether the whole becomes more than the sum of its parts.",
+  "scores": [
+   {
+    "proposal": "A-field-operators",
+    "physics_generality": 9,
+    "fidelity_mechanism": 8.5,
+    "feasibility_and_scope": 6,
+    "performance_memory": 8.5,
+    "learnability_ml_usability": 7.5,
+    "extensibility_modularity": 9,
+    "deeptrack_integration": 7,
+    "overall": 7.5,
+    "strengths": [
+     "§4.3 carries the zero order as an analytic PlaneWaves background ⊕ a sampled scattered field, with the explicit cross term formed in one place (Detect.square_reduce). Measurements: 8–10 % seam error for off-grid tilts, and iSCAT error drops from 8.7 % to 2e-7. This is what makes illumination tilt, LED positions and condenser NA learnable without grid snapping.",
+     "§6.3 estimator table: scaled-ST Poisson, relaxed ST presence, `score_surrogate` that is a safe no-op when unused, and a CI non-zero-gradient assertion for every Learnable and every learnable distribution parameter.",
+     "§6.1/§6.2: `Learnable(scale=, bounds=)` for optimiser conditioning; sharing by identity (fit a pupil on beads, then `pupil.freeze()` and reuse it in §9b); contextvars call-scoped handlers (condition, replay, mean, block, detach); plates.",
+     "§7.2 plugin conformance suite: gradcheck in c128, linearity, analytic-background handling, convergence to the implementation named in `approximates`. Third-party solvers therefore cannot silently break learnability.",
+     "§5.8 runtime sampling-health diagnostics (aliasing energy, wrap-around, Mie truncation residual) written into batch.meta.",
+     "§10 `legacy_dt` preset with an explicit diff table covering #445 signs and the NA-truncated propagator. The adapter calls update() internally, which removes the DTDV431/DTEx252 stale-cache pitfall."
+    ],
+    "weaknesses_or_errors": [
+     "The public API is operator-algebra first (§7.1 graph, categories, combinators). ML-facing ergonomics are thin next to D: no streaming/prefetch, no common-random-number replay, no MultiView or interventions, and no per-sub-batch score baselines.",
+     "§10 says DT batched resolve is 'scalar Python, microseconds per sample'. D measured about 0.3 ms per image as a lower bound, which caps the adapter at roughly 3k images/s.",
+     "§13.1 uses SI metres internally. Every special function then has to guard against float32 underflow of high powers of small lengths (α² for a 10 nm sphere is exactly 0 in f32, which I confirmed). The per-Learnable `scale` fixes the optimiser but not the numerics.",
+     "§5.2/§5.3 say `koehler.stochastic` noise 'hides under shot noise'. Measured: K=2 leaves 2.2 % rel RMS against 1.0 % shot noise at 10⁴ photons/px.",
+     "§13.6 'sparse ~10× faster' is measured against per-emitter full-frame FFT, not against the strata-OTF dense path. The real advantage is 3.8–5.7× (D), with a crossover at about 300–500 emitters per 256² image (B).",
+     "Feasibility: vectorial, two-stage Transduce, SOCS/WOTF, two ports and BPM adjoints in about 35 weeks with 1–2 developers is optimistic. The dual-part Field adds work to every operator (§14 risk 1).",
+     "The DT adapter does not say how post-optics DT features (noise, normalisation, augmentations with `_update_properties` label co-transforms, user lambdas) run in the batched path."
+    ]
+   },
+   {
+    "proposal": "B-scene-planner",
+    "physics_generality": 8.5,
+    "fidelity_mechanism": 9,
+    "feasibility_and_scope": 5,
+    "performance_memory": 8,
+    "learnability_ml_usability": 7.5,
+    "extensibility_modularity": 8.5,
+    "deeptrack_integration": 7.5,
+    "overall": 7.3,
+    "strengths": [
+     "§6 gradient audit: a zero-gradient path for a requested learnable is a compile error that names the stage and the fix. Biased paths warn. It is backed by an empirical audit in CI.",
+     "§5.11 consistency contract across tiers (same radiometry, frames, sign conventions and label geometry) plus split-fidelity plans. These are prerequisites for cross-fidelity surrogate gradients, `compare`, and switching fidelity mid-training.",
+     "§5.12: `explain/why/diff`, frozen plans in JSON stored with datasets, golden plan snapshots, and property-based planner tests (§11.4). Together these make datasets reproducible for ML users.",
+     "§6: `.truncate()` (reparameterised inverse CDF) is the mechanism by which random sites feed shape-affecting quantities. The planner lists which sites need truncation or bounds. ModuleParam and Data leaf kinds.",
+     "§5.6 cut-out-and-fill and host-index handling for embedded particles. Beads in cells are then neither double-counted nor mislabelled.",
+     "§10 DT template: probe the DT DAG (256 resolutions) to derive bounds and N_max, plan once, then run BatchedDataset. `pipeline.explain()` is exposed in DT.",
+     "§9d `with_fidelity` returns a simulator that shares the ParamStore, so plans are immutable."
+    ],
+    "weaknesses_or_errors": [
+     "§5.8 includes a Cascades/Volcano cost-based search, ten passes, cost and memory models and device calibration in v1. That is heavy to build and maintain for a 1–3 person team and adds opacity (§14.1). v1 has 2–3 implementations per slot.",
+     "§5.3/§14.9: the gradient set changes the chosen forward implementation (SOCS vs Abbe; a train()/eval() plan pair). Images then differ between training and evaluation, which is a skew pitfall. `same_plan_for_eval=True` should be the default.",
+     "§6 seeding uses one torch.Generator per (seed, site_path). Per-site launches cost 1.48 ms against 0.17 ms fused (D, Exp D).",
+     "§5.8 default guard policy `clamp` for learnables. Clamping sampled values creates point masses at the bound and zero gradients, which biases distribution learning.",
+     "§13.1 'a⁶ for a=1e-7 m is 1e-42, which is subnormal and flushed' is wrong: CUDA f32 returns 1.0005e-42 (subnormal with precision loss, not flushed). The µm conclusion stands.",
+     "§10 treats DT resolution as 'cheap scalar Python' with no measured ceiling. Post-optics DT features are not handled.",
+     "The score surrogate for batch-level losses such as MMD is unbiased but has very high variance, and B offers no sub-batch baseline."
+    ]
+   },
+   {
+    "proposal": "C-mvp-scope",
+    "physics_generality": 5.5,
+    "fidelity_mechanism": 6,
+    "feasibility_and_scope": 9,
+    "performance_memory": 7.5,
+    "learnability_ml_usability": 6,
+    "extensibility_modularity": 7,
+    "deeptrack_integration": 8.5,
+    "overall": 6.8,
+    "strengths": [
+     "§2.5 'not building' table with the seam kept for each item, plus the rule that every feature needs an application trigger. §12 gives a 20-week plan with numeric exit criteria.",
+     "§8.1 measured W1–W5 workloads: batched vs per-sample Mie is 33× faster; Abbe K sweep; multislice checkpointed to 0.88 GiB. The regression suite is committed in M0.",
+     "§10 adapter at three levels with the most concrete DT semantics mapping table (§10.2: upscale→oversample, upsample→raster_sigma, padding→auto, return_field→'field', Darkfield→blocked reference). Parity list includes DTGS131 and DTGS172. The adapter lands in M2, before the coherent work.",
+     "M0 exit includes an API review with two DT2 users. §14 lists concrete open questions for the DT team: DSL convergence, output layout, licence.",
+     "§5.4/§5.7 principle that the scene Trace is fidelity-independent, so the same trace renders at every fidelity. `compare` is meaningful because of it.",
+     "§3.1 layering lint plus grep bans on torch.manual_seed, np.random and bare torch.poisson under src/. `batch_shape` tuples such as (K, Z) are inferred from leaf shapes (§9b)."
+    ],
+    "weaknesses_or_errors": [
+     "§4.1 makes radiometry depend on the tier: the PSF integrates to collection efficiency only at `accurate`, and to 1 at draft/standard. Learned photon distributions and calibrations then do not transfer between tiers, and `compare` and cross-fidelity surrogate gradients break.",
+     "§4.4 snaps Köhler source points and `Reference.k_in` to the k-grid. Gradients to illumination tilt, condenser NA and LED positions are then zero (piecewise constant), and A measured 6–8 mrad of snapping error.",
+     "§6.1: Random optics and camera leaves are shared across the batch unless `per='sample'`. Batches are then not i.i.d., which silently departs from DT's per-sample resolve semantics.",
+     "§13 decision 13 computes Mie coefficients on the CPU when P·n_max is small. With radii sampled or learned on the GPU this forces a host–device sync every step and blocks CUDA-graph capture of sample+render.",
+     "`Count(max, mean)` hides the count law (it is implicitly Binomial), and users cannot express a Poisson or uniform-integer count. The `Learnable` scale default of |init| degenerates at init=0 (Zernikes, pixel pupils).",
+     "v1 is scalar only, has no excitation/Transduce map, no time plate and no photophysics. That blocks high-NA SMLM system identification and multi-frame SMLM, and tv_tensors labels are deferred.",
+     "No two-port contract, only a `direction` flag. This carries retrofit risk for TIRF and interface iSCAT."
+    ]
+   },
+   {
+    "proposal": "D-learnable-pipelines",
+    "physics_generality": 8,
+    "fidelity_mechanism": 8,
+    "feasibility_and_scope": 6,
+    "performance_memory": 8.5,
+    "learnability_ml_usability": 9.5,
+    "extensibility_modularity": 8.5,
+    "deeptrack_integration": 9,
+    "overall": 8.6,
+    "strengths": [
+     "Estimator defaults are backed by measurement (Exp B). Scaled-ST Poisson is unbiased on a variance-sensitive loss where plain ST gives exactly 0. ST Concrete at τ=0.5 gets the sign right where soft τ=1 gets it wrong. Score-function std is about 6000× larger. §11.4 statistical estimator tests encode these results.",
+     "§6.5 the Trace stores base noise ε. `replay(mode='noise')` then gives common-random-number fitting (deterministic L-BFGS by sample-average approximation), and counter-based RNG gives DT `Dataset[i]` semantics.",
+     "§6.3 `gradient_report` combines a static tag walk with a dynamic probe. It catches hard annuli, plain-ST Poisson and other silent zeros, and names the estimator each learnable relies on.",
+     "§6.2 plates (batch, image, object, frame, mode, Group(k)), with hierarchical priors by nesting. Granularity is data, not code.",
+     "§6.6 labels, interventions, MultiView (one trace to BF and FL pairs), ReuseNoise, PerObjectImages and tv_tensors. §8.3 `sim.stream` prefetches on a side stream and uses CUDA graphs that work on Windows without Triton.",
+     "§7/§9e `fit` subsystem (likelihood with camera log_prob, distribution matching, CRLB, Laplace, residual slots) and `as_inverse(latents=…, multistart=…)`. Exp C proof of concept: median 0.7 %, σ 9 % from unlabeled images.",
+     "§10 three-level DT path: adapter plus `sim.as_feature()` (usable with deeplay) plus `from_deeptrack` with a `dt.dist` proposal, then a DT3 front-end. The adapter ceiling (0.3 ms/image resolve) is measured and documented.",
+     "Exp A shows that too small a ROI gives 5.7 % error while conserving energy, so a naive sum check misses it. D therefore makes ROI sizing a planner-from-bounds duty."
+    ],
+    "weaknesses_or_errors": [
+     "§5.5/§5.3 `fast` = stochastic Abbe K=2, with 'residual speckle masked by shot noise'. Measured: K=2 leaves 2.2 % rel RMS, spatially correlated, against 1.0 % shot noise at 10⁴ photons/px, while deterministic K=9 gives 0.8 %. Networks train on that artefact.",
+     "§6.3 switches the count law from exact to Binomial slots when the count becomes learnable, and §5.6 re-plans on grad-set changes. The generated data distribution and forward model then depend on what is being trained.",
+     "§4.1 uses +z into the sample, away from the objective, with planner-inserted frame flips. This widens the sign-bug surface relative to the propagation convention every propagator uses.",
+     "§13.1 'Adam's ε (1e-8) is larger than typical gradients' natural scale' in metres is backwards. Gradients with respect to metre-valued lengths scale as 1/length and are large. The real problem is that Adam's step is about lr in parameter units.",
+     "Stochastic 'mode'-plate draws stored in the Trace make the scene trace fidelity-dependent, which breaks replay of one trace across fidelities.",
+     "No analytic zero-order background, although example (a) samples a Random illumination tilt per image. A tilted sampled plane wave on a periodic grid seams (A: 8–10 % rms), unless the wave is snapped, which kills the gradient.",
+     "§5.6 default guard policy clamps sampled values.",
+     "Feasibility: 47 weeks with 2–3 FTE, a 1.5–2.5 kLOC prob layer, and validity-as-probability, fidelity schedules, randomised fidelity and field-dependent maps all in v1. This needs phasing.",
+     "Post-optics DT features in BatchedDataset or from_deeptrack are not specified."
+    ]
+   }
+  ],
+  "recommended_base": "D-learnable-pipelines",
+  "grafts": [
+   {
+    "from": "A-field-operators",
+    "idea": "Carry the unscattered and reference light as an analytic PlaneWaves background ⊕ sampled scattered field in every coherent carrier, with a single Detect.square_reduce forming |E_b|² + 2Re(E_b*E_s) + |E_s|². A thin screen maps E_s ← (t−1)E_b + tE_s.",
+    "why": "Tilt, LED positions and condenser NA become exactly differentiable with no seam (measured 8–10 % error sampled, 6–8 mrad snapped). iSCAT stays float32-safe (8.7 % to 2e-7). Darkfield, phase rings and reference attenuation are exact. D's example (a) samples a random tilt and needs this."
+   },
+   {
+    "from": "A-field-operators",
+    "idea": "Plugin conformance suite in gs.testing: complex128 gradcheck, linearity-in-field, energy conservation, analytic-background handling, convergence to the declared `approximates` tier, and validity/cost sanity checks.",
+    "why": "Third-party solvers cannot silently degrade learnability or fidelity. This keeps the orthogonal-parts promise honest."
+   },
+   {
+    "from": "A-field-operators",
+    "idea": "Runtime sampling-health diagnostics (spectral energy near the band edge, energy reaching the padding, max per-slice phase, Mie truncation residual, out-of-FOV fraction) written into batch.meta.",
+    "why": "Training loops need machine-readable evidence that a drifting learnable pushed the scene outside the plan's regime, with no host sync."
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "Static gradient audit: compose the declared gradient quality along every learnable's path. Refuse to compile a zero path with an actionable fix, and warn on biased paths. Combine it with D's dynamic probe.",
+    "why": "Silent zero gradients (hard masks, bare torch.poisson, plain ST, hard annuli) are the most common failure in sim-to-real work. Catching them at construction saves whole training runs."
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "Consistency contract across all tiers: identical absolute radiometry, frames and sub-pixel origin, sign conventions and label geometry, tested in CI.",
+    "why": "Cross-fidelity surrogate gradients, `compare`, fidelity curricula and calibration transfer (fit at `accurate`, generate at `fast`) all depend on it. C's §4.1 violates it."
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "Frozen plans (`plan.to_json`) stored with materialised datasets, plus golden plan snapshots, `plan.why()`/`plan.diff()`, and an immutable `sim.with_fidelity()` that shares the ParamStore.",
+    "why": "Datasets become exactly reproducible across machines and versions, and planner changes show up as reviewable diffs."
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "DT adapter bounds by probing: resolve the DT DAG N times on the CPU to estimate bounds and N_max for opaque lambdas, plan once, arm guards. Expose `pipeline.explain()` inside DT.",
+    "why": "DT lambdas are opaque, so shape-affecting bounds (z-range → padding and ROI) can only be estimated empirically. This keeps adapter plans static."
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "`.truncate()` (reparameterised inverse CDF) as the required mechanism by which random sites feed shape-affecting quantities. The planner lists sites that need truncation or declared bounds.",
+    "why": "Sampled values never exceed plan bounds by construction, and the truncation is part of the differentiable model. Clamping at run time distorts the distribution."
+   },
+   {
+    "from": "B-scene-planner",
+    "idea": "Cut-out-and-fill and host-index handling for particles embedded in voxel hosts, even under C0.",
+    "why": "Beads inside cells are not double-counted as voxels and as Mie scatterers. Labels and learned RI/size stay correct in mixed scenes."
+   },
+   {
+    "from": "C-mvp-scope",
+    "idea": "The 'not building in v1' table with retained seams, and the rule that every feature names an application trigger and a numeric exit criterion. Use it to phase D's v1: validity-as-probability, fidelity schedules, randomised fidelity and field-dependent maps move to v1.x.",
+    "why": "D's 47-week, 2–3 FTE plan is the main risk to its otherwise best ML story."
+   },
+   {
+    "from": "C-mvp-scope",
+    "idea": "C's concrete DT semantics mapping table (§10.2), the parity list including DTGS131 and DTGS172, an M0 API review with DT users, and the open-questions list for the DT team.",
+    "why": "This is the most actionable migration contract, and the requesting user is a DT core developer."
+   },
+   {
+    "from": "C-mvp-scope",
+    "idea": "Keep the scene Trace fidelity-independent. Numerical randomness (stochastic Abbe points, random-phase realisations) and detector noise come from separate derived streams, not from scene sites.",
+    "why": "One trace must replay at any fidelity for `compare`, surrogate gradients and MultiView. D's plate='mode' currently leaks plan-dependent draws into the trace."
+   },
+   {
+    "from": "C-mvp-scope",
+    "idea": "Layering lint plus source-level bans on torch.manual_seed, np.random and bare torch.poisson/normal/bernoulli under src/. Use the W1–W5 workload regression suite as milestone exit criteria.",
+    "why": "These cheap guards prevent the global-state and silent-zero regressions that DT suffered."
+   },
+   {
+    "from": "C-mvp-scope",
+    "idea": "Accept arbitrary `batch_shape` tuples such as (K beads, Z planes) or (B, T), inferred from leaf shapes, flattened internally and unflattened on output.",
+    "why": "Bead-stack fitting and sequences then need no Derived gymnastics. This is a natural ML-facing API."
+   }
+  ],
+  "key_decision_verdicts": [
+   {
+    "decision": "Units",
+    "verdict": "Micrometres internally as plain floats (B/C/D), with SI metres and pixels converted only at the boundaries (DT adapter, I/O). Keep `Learnable(scale=, bounds=)` normalisation regardless.",
+    "rationale": "Adam moves each parameter by about lr in parameter units, so lr 1e-2 in metres is 1 cm on a 1 µm position. In float32 metres, α² for a 10 nm sphere underflows to exactly 0 (measured), and a⁶ at 100 nm loses precision as a subnormal. Float32 relative phase precision is unit-independent, so µm costs nothing. A's metres-plus-scale fixes only the optimiser, not the underflow."
+   },
+   {
+    "decision": "Central interchange representation",
+    "verdict": "The angular spectrum at a reference plane is the lingua franca. It has two storage forms: sparse, lazily evaluated ObjectSpectra (per-object, ROI or global k-grid) and a dense grid spectrum. A T/R port tag is part of the contract from day one: only T is complete in v1, with R from analytic Mie, dipole and Fresnel. The zero order and references are carried as analytic PlaneWaves (A). There is a separate incoherent EmitterSet/Irradiance channel.",
+    "rationale": "Sparse objects give exact position gradients through phase ramps and fast rendering (51k img/s). Dense solvers are one FFT away. The analytic background makes tilts learnable and interference accurate. The port tag avoids an expensive retrofit for iSCAT and TIRF. C's single port with a `direction` flag is too thin."
+   },
+   {
+    "decision": "Planner sophistication and timing",
+    "verdict": "Rule-based, deterministic planning at Simulator construction, cached. It filters by capability, then validity over bounds, then gradient quality (B's audit), then a simple cost ranking where two or more candidates survive. Output: explain/why/diff and frozen JSON plans. No Cascades search in v1. Re-plan only on explicit triggers or guard trips.",
+    "rationale": "There are 2–3 implementations per slot in v1. Debuggability and static shapes (cuFFT plans, CUDA graphs) matter more than optimality for ML users. Search can be added when three or more implementations compete."
+   },
+   {
+    "decision": "Gradient-set-dependent planning",
+    "verdict": "By default the grad set may change only memory and gradient strategy (inference_mode, autograd, checkpoint, adjoint). It must never change the forward numerical model or the sampled data distribution (e.g. the count law, or SOCS vs Abbe) without an explicit opt-in.",
+    "rationale": "B and D re-plan on grad-set changes, and D swaps the count law. That produces train/eval image skew and data that depends on which parameters are trained, which is a subtle ML bug."
+   },
+   {
+    "decision": "Parameter and trace system",
+    "verdict": "An own prob layer built from D: kinds Fixed, Learnable, Random, Derived, Choice, Count, Process, ModuleParam and External. Plates: batch, image, object, frame, mode, Group(k). A per-site estimator. The Trace holds values, presence, base noise ε, log_prob and seed. Counter-based Philox RNG keyed by (seed, image index, site id), so fused draws and per-site stream stability coexist. contextvars handlers. No pyro or tensordict dependency; `to_tensordict` is optional.",
+    "rationale": "Needed semantics that Pyro lacks: presence slots, bound truncation, estimator policy, CRN replay, graph-capturable fused draws. D measured 1.48 ms for per-site draws against 0.17 ms fused. B's per-site generators are slow, and plain fusion shifts streams unless the RNG is counter-based."
+   },
+   {
+    "decision": "nn.Module vs functional core",
+    "verdict": "All four agree, and this is adopted: a functional physics core that never sees Params, frozen-dataclass specs, and one Simulator nn.Module owning the ParamStore. Learnables are shared by object identity. ModuleParam covers neural fields and residual CNNs.",
+    "rationale": "Kernels stay gradcheck-able and graph-capturable. Users get `.to()`, `state_dict`, `parameters()`, param groups and DDP. This avoids the mutable-module aliasing trap."
+   },
+   {
+    "decision": "Sparse vs dense render paths",
+    "verdict": "Both in v1. The planner chooses per population from the measured crossover (about 300–500 emitters per 256²). The ROI size is derived from defocus, NA and λ bounds. There is a global-spectrum sparse mode for large defocus. Composition is C0 in v1 with cut-out-and-fill, and C1 injection in v2. When a count is learnable, all N_max slots must be rendered (no culling of absent slots).",
+    "rationale": "Most DL data generation is sparse. Too small a ROI silently gives 5.7 % error. The gradient to presence probability needs the would-be contribution of absent slots."
+   },
+   {
+    "decision": "Polarization",
+    "verdict": "The P axis is always present. The scalar path ships first. Vectorial 6-basis dipole emitters land in v1 in a late milestone. The Jones pupil follows in v1.x and tensor ε in v2. A fixed dipole with a scalar or Gaussian PSF is a planner error.",
+    "rationale": "Retrofitting the axis is the most expensive change. Vectorial sparse rendering is affordable (10.8k frames/s measured in A). High-NA SMLM system identification (the uiPSF/DECODE users, DTEx252) needs it. Fixed dipoles bias localisation by up to 40 nm."
+   },
+   {
+    "decision": "Multi-wavelength grids",
+    "verdict": "Consensus: one object-space grid and k-grid for all λ, with a per-λ soft pupil radius. Λ is a summed axis with power weights that include quadrature. Per-image λ is allowed through plate='image'. MFT/CZT maps to the camera for non-integer ratios.",
+    "rationale": "Avoids Chromatix's per-λ dx leak and makes the λ sum a weighted reduction. Randomised or learnable λ needs no shape change."
+   },
+   {
+    "decision": "Time and dynamics",
+    "verdict": "T is a plate in v1, with reparameterised Brownian, drift and OU processes (learnable D and v) and two-state blinking (expected by default, stochastic plus score opt-in). Exposure sub-step motion blur arrives in v1.x.",
+    "rationale": "DT sequences (LodeSTAR, MAGIK) and multi-frame SMLM are core. Retrofitting T later changes every label renderer's shape contract. C's 'fold into batch' loses the per-frame dependency semantics."
+   },
+   {
+    "decision": "Default plate for Random sites",
+    "verdict": "Per image (B, A, D and DT semantics). Batch-shared randomness is opt-in only. Learnables are batch-plate.",
+    "rationale": "C's shared-per-batch default for random optics and camera leaves produces non-i.i.d. batches and silently reduces diversity compared with DT's per-sample resolve."
+   },
+   {
+    "decision": "Poisson and detector estimators",
+    "verdict": "Scaled straight-through Poisson by default, with Gaussian reparameterisation as an option. `expected` + `log_prob` for likelihood fitting. EM gain by Gamma rsample. ST round and a soft clamp when learning. Bare torch.poisson/normal/bernoulli are banned.",
+    "rationale": "D measured that plain ST gives exactly 0 on variance-sensitive losses while scaled ST is unbiased. The torch samplers return silent zero gradients."
+   },
+   {
+    "decision": "Learnable counts and categorical choices",
+    "verdict": "N_max bucketed slots with ST Concrete presence at τ=0.5 by default. Score function with a leave-one-out (or sub-batch, for MMD) baseline as the unbiased fallback. A mean-field mode for early calibration. The count law is stated explicitly by the user and is not changed by learnability.",
+    "rationale": "Soft Concrete at τ=1 had the wrong sign in D's Exp B, while ST at τ=0.5 matched the truth (−465 vs −473). Hard forward keeps images and labels exact."
+   },
+   {
+    "decision": "Partial-coherence estimator for data generation",
+    "verdict": "Deterministic quadrature (K≈9–25) for training data. Stochastic Abbe only for calibration gradients or as an explicit, documented augmentation. SOCS/WOTF only with fixed optics and declared thin or weak samples.",
+    "rationale": "Measured here: K=2 stochastic leaves 2.2 % correlated rel RMS against 1.0 % shot noise at 10⁴ photons/px, while deterministic K=9 gives 0.8 %. It is not masked at brightfield photon levels."
+   },
+   {
+    "decision": "z-axis convention",
+    "verdict": "Internally +z is the propagation direction of collected light (toward the objective), and z=0 is the coverslip/sample interface with `focus` as a scene parameter (B). User-facing `gs.depth()` and `gs.rel_focus()` helpers cover SMLM-style depth.",
+    "rationale": "This matches every propagator's e^{+ik_z z}. D's +z into the sample needs planner-inserted flips, which are a sign-bug surface."
+   },
+   {
+    "decision": "Bounds and guards for drifting learnables",
+    "verdict": "Shape-affecting random sites are truncated by construction. Shape-affecting learnables must have interval constraints (the planner errors otherwise). Guards are asynchronous and lag one step, with warn plus re-plan as the default, never clamping sampled values.",
+    "rationale": "Clamping (B and D default) creates point masses at bounds and zero gradients that bias distribution learning. Truncation keeps the model exact and differentiable."
+   },
+   {
+    "decision": "Mie coefficient placement",
+    "verdict": "fp64 on the GPU, all particles × λ in one call, captured in the sample+render CUDA graph. A CPU path only for inference or MPS.",
+    "rationale": "C's CPU placement forces a host–device sync every step when radii are sampled or learned on the GPU, and it blocks graph capture."
+   },
+   {
+    "decision": "Radiometry",
+    "verdict": "Absolute radiometry, identical at every tier: the pupil is normalised so the PSF integral equals collection efficiency, and the camera converts photons to e⁻ to ADU.",
+    "rationale": "Learned photon distributions and calibrations must transfer across tiers. C's tier-dependent normalisation breaks this."
+   },
+   {
+    "decision": "Output layout and labels",
+    "verdict": "[B, (T,) C, H, W], channel-first, with acquisition axes flattened into C by default. Labels come from trace sites, label renderers and taps, typed as tv_tensors when torchvision is present, with padded per-object tables plus presence and in-FOV masks. The DT adapter returns (H, W, C) on request.",
+    "rationale": "This matches deeplay, Lightning and torchvision augmentation. Labels come from the same trace, so they are consistent by construction."
+   },
+   {
+    "decision": "DeepTrack2 integration strategy",
+    "verdict": "Level 1: DT-named Features returning descriptors, a BatchedDataset (probe bounds, render once) and `sim.as_feature()`. Level 2: a `from_deeptrack` bridge with a co-designed `dt.dist`. Level 3: a DT3 front-end. `legacy_dt` is used only for golden parity tests, and the defaults fix DT's physics. Document the adapter ceiling of about 3k img/s and specify the post-optics feature protocol.",
+    "rationale": "This keeps DT's property-DAG UX, where its value lies, and moves physics and batching into the engine. Measured resolve cost motivates the native bridge. The user can land `dt.dist` in DT."
+   },
+   {
+    "decision": "Dependencies",
+    "verdict": "Consensus: core is torch plus numpy. Extras: triton/triton-windows, pytorch-finufft, deeptrack, deepinv, io, vision. GPL oracles are test-only. No pint, pydantic, pyro or tensordict in core. MIT licence.",
+    "rationale": "Triton is absent on Windows by default. GPL code cannot be vendored. Unit and validation wrappers in hot paths break autograd and compilation."
+   }
+  ],
+  "errors_to_fix": [
+   "D §5.5 fidelity table and §5.3, and A §5.2/§5.3: the claim that stochastic Abbe residual is 'masked by shot noise' is false at brightfield photon levels. Measured here on a thin phase object at σ=0.5: K=2 gives 2.2 % rel RMS spatially correlated residual against 1.0 % shot noise at 10⁴ photons/px; deterministic K=9 gives 0.8 %. D's `fast` default of stochastic K=2 must become deterministic quadrature for data generation.",
+   "C §4.1: tier-dependent radiometry (PSF integral = collection efficiency only at `accurate`, 1 otherwise) breaks transfer of learned photon distributions, `compare`, and cross-fidelity surrogate gradients. Radiometry must be identical at every tier (B §5.11 contract).",
+   "C §4.4: snapping Köhler source points and Reference.k_in to the k-grid gives zero gradients for illumination tilt, condenser NA and LED positions, and adds 6–8 mrad angle error (A). Use an analytic plane-wave background or continuous-coordinate evaluation.",
+   "C §6.1: shared-per-batch default plate for Random optics and camera leaves produces non-i.i.d. training batches and departs from DT's per-sample semantics. Default must be per-image.",
+   "C §13 decision 13: CPU placement of Mie coefficients inserts a host–device sync every training step when radii live on the GPU, and prevents CUDA-graph capture. Use GPU fp64 with graph capture in training loops.",
+   "C §6.1: Learnable scale defaulting to |init| is degenerate for init=0 (Zernike coefficients, pixel pupils) and for sign-changing parameters. It needs a quantity-unit default.",
+   "D §6.3 and §5.6, B §5.3/§14.9: making a parameter learnable must not change the sampled distribution (D swaps an exact count for Binomial slots) or the forward model (SOCS vs Abbe; train/eval plan pairs). Otherwise data and train/eval images depend on what is being trained.",
+   "B §5.8 and D §5.6: the default guard policy `clamp` on sampled values creates point masses at the bounds and zero gradients, biasing distribution learning. Use truncation by construction plus warn and re-plan.",
+   "D §13.1: 'Adam's ε is larger than typical gradients' natural scale' in metres is backwards. Gradients with respect to metre-valued lengths are large (∝1/length). The actual issue is that Adam's step is about lr in parameter units.",
+   "B §13.1: 'a⁶ for a=1e-7 m is 1e-42, subnormal and flushed' is wrong. CUDA float32 returns 1.0005e-42 (subnormal with precision loss, not flushed to zero); measured here. The underflow argument holds only for smaller quantities (α² for a 10 nm sphere in metres is exactly 0, measured).",
+   "A §10 and B §10: DT per-sample resolve is not 'microseconds'. D measured about 0.3 ms/image as a lower-bound proxy, so BatchedDataset tops out at about 3k img/s. Document the ceiling and motivate the native bridge.",
+   "A §13.6: the 'sparse ~10× faster' figure compares against per-emitter full-frame FFT, not the strata-OTF dense path. The realistic advantage is 3.8–5.7× (D Exp A), with a crossover at about 300–500 emitters per 256² (B).",
+   "All four: the DT BatchedDataset/bridge does not say how post-optics DT features run (noise, NormalizeMinMax, Affine/Flip augmentations with `_update_properties` label co-transforms, user lambdas). The adapter needs a two-phase protocol: resolve with deferred-image placeholders, render the batch, then replay the post-optics sub-DAG per replicate with the same _ID. Alternatively, translate known post-optics features into batched detector or augmentation stages.",
+   "All four: with learnable relaxed presence, absent slots must still be rendered, because the gradient to p needs their would-be contribution. The cost model must charge N_max, not E[N], and culling of absent objects is only valid when the count is not learnable.",
+   "D §6.2: 'mode'-plate stochastic source draws stored in the scene Trace make the trace fidelity-dependent. Keep numerical randomness in separate derived streams so one trace replays at any fidelity.",
+   "D §6 and B §6: fusing draws by (family, plate) conflicts with per-site stream stability unless the RNG is counter-based and keyed by (seed, image index, site id). Specify Philox-style keyed generation as the single mechanism.",
+   "Scalar-only v1 (C) must at least raise a planner error for fixed-dipole emitters with scalar or Gaussian PSFs (up to 40 nm localisation bias per Stallinga & Rieger), as C §5.6 partly does. The same rule applies to D's and A's `fast` tiers."
+  ]
+ }
+]
