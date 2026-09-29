@@ -1,0 +1,4036 @@
+{
+ "core:Chain": {
+  "class": "gradix.compose.chain.Chain",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "light",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "illumination_optics",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "scatterers",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "emitters",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "excite",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "imaging",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "references",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "detection_optics",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "detector",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "background",
+    "optional": true,
+    "quantity": "photons",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "photons"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "acquisition",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "environment",
+    "optional": true,
+    "required": false
+   }
+  ],
+  "name": "chain",
+  "version": 1
+ },
+ "core:EmitterDensity": {
+  "class": "gradix._core.carriers.EmitterDensity",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "S",
+     "Z",
+     "Y",
+     "X"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "data",
+    "optional": false,
+    "quantity": "photons",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "photons"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "S",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelengths",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "S",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "weights",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "grid",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": "AcqIndex(axes=())",
+    "kind": "static",
+    "name": "acq",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.emitter_density",
+  "version": 1
+ },
+ "core:EmitterSet": {
+  "class": "gradix._core.carriers.EmitterSet",
+  "fields": [
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N",
+     "3"
+    ],
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "position",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "photons",
+    "optional": false,
+    "quantity": "photons",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "photons"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "presence",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "1",
+     "N"
+    ],
+    "dtype": "integer",
+    "event": [],
+    "kind": "tensor",
+    "name": "species",
+    "optional": true,
+    "quantity": "index_map",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "int64"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "S",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelengths",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "S",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "weights",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N",
+     "6"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "dipole",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "1",
+     "N"
+    ],
+    "dtype": "integer",
+    "event": [],
+    "kind": "tensor",
+    "name": "id",
+    "optional": true,
+    "quantity": "index_map",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "int64"
+   },
+   {
+    "choices": null,
+    "default": "AcqIndex(axes=())",
+    "kind": "static",
+    "name": "acq",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.emitter_set",
+  "version": 1
+ },
+ "core:Field": {
+  "class": "gradix._core.carriers.Field",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "M",
+     "L",
+     "P",
+     "*",
+     "*"
+    ],
+    "dtype": "complex",
+    "event": [],
+    "kind": "tensor",
+    "name": "scattered",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "background",
+    "optional": true,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "grid",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": [
+     "space",
+     "angular"
+    ],
+    "default": "space",
+    "kind": "static",
+    "name": "domain",
+    "optional": false,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "z_ref",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "shared",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "choices": [
+     1,
+     -1
+    ],
+    "default": 1,
+    "kind": "static",
+    "name": "travel",
+    "optional": false,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "M",
+     "2"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "residual_tilt",
+    "optional": true,
+    "quantity": "frequency",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "cycles/\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 1.0,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "n_medium",
+    "optional": false,
+    "quantity": "index",
+    "required": false,
+    "role": "any",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelengths",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "weights",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "M"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "mode_weights",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "choices": [
+     "scalar",
+     "jones",
+     "cartesian"
+    ],
+    "default": "scalar",
+    "kind": "static",
+    "name": "basis",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.field",
+  "version": 1
+ },
+ "core:Homogeneous": {
+  "class": "gradix.objects.environment.Homogeneous",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "n",
+    "optional": false,
+    "quantity": "index",
+    "required": true,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "1"
+   }
+  ],
+  "name": "env.homogeneous",
+  "version": 1
+ },
+ "core:Irradiance": {
+  "class": "gradix._core.carriers.Irradiance",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "L|1",
+     "Y",
+     "X"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "data",
+    "optional": false,
+    "quantity": "photons",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "photons"
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "grid",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": "AcqIndex(axes=())",
+    "kind": "static",
+    "name": "acq",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.irradiance",
+  "version": 1
+ },
+ "core:LayeredMedium": {
+  "class": "gradix.objects.environment.LayeredMedium",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "sample",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "coverslip",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "immersion",
+    "optional": false,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 170.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "thickness",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "design_coverslip",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "design_thickness",
+    "optional": true,
+    "quantity": "length",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "env.layered",
+  "version": 2
+ },
+ "core:Microscope": {
+  "class": "gradix.containers.containers.Microscope",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "objective",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "camera",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "light",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "acquisition",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "background",
+    "optional": true,
+    "quantity": "photons",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "photons"
+   }
+  ],
+  "name": "microscope",
+  "version": 1
+ },
+ "core:ObjectSpectra": {
+  "class": "gradix._core.carriers.ObjectSpectra",
+  "fields": [
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "evaluator",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "params",
+    "optional": false,
+    "required": true
+   },
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N",
+     "3"
+    ],
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "position",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "presence",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "choices": [
+     1,
+     -1
+    ],
+    "default": 1,
+    "kind": "static",
+    "name": "travel",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.object_spectra",
+  "version": 1
+ },
+ "core:Objective": {
+  "class": "gradix.optics.objective.Objective",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "NA",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "magnification",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "focus",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "setting",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "container": "tuple",
+    "default": [],
+    "kind": "child",
+    "name": "pupil",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "optics.objective",
+  "version": 2
+ },
+ "core:PlaneWaves": {
+  "class": "gradix._core.carriers.PlaneWaves",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "M",
+     "J",
+     "L",
+     "P"
+    ],
+    "dtype": "complex",
+    "event": [],
+    "kind": "tensor",
+    "name": "amplitude",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "M",
+     "J",
+     "2"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "u",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelengths",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "z0",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "shared",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "choices": [
+     1,
+     -1
+    ],
+    "default": 1,
+    "kind": "static",
+    "name": "travel",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.plane_waves",
+  "version": 1
+ },
+ "core:Polarization": {
+  "class": "gradix.light.polarization.Polarization",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "complex",
+    "event": [
+     2
+    ],
+    "kind": "tensor",
+    "name": "vector",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "choices": null,
+    "default": false,
+    "kind": "static",
+    "name": "incoherent",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "light.polarization",
+  "version": 1
+ },
+ "core:Sample": {
+  "class": "gradix.containers.containers.Sample",
+  "fields": [
+   {
+    "container": "mapping",
+    "default": null,
+    "kind": "child",
+    "name": "populations",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "environment",
+    "optional": false,
+    "required": true
+   }
+  ],
+  "name": "sample",
+  "version": 1
+ },
+ "core:Spectrum": {
+  "class": "gradix.objects.spectrum.Spectrum",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelengths",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "wavelength",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "weights",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "wavelength",
+    "shape_affecting": false,
+    "unit": "1"
+   }
+  ],
+  "name": "spectrum",
+  "version": 1
+ },
+ "data_object:acq.focus_stack": {
+  "class": "gradix.objects.acquisition.FocusStack",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     -1
+    ],
+    "kind": "tensor",
+    "name": "focus",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "acq.focus_stack",
+  "version": 1
+ },
+ "data_object:acq.frames": {
+  "class": "gradix.objects.acquisition.Frames",
+  "fields": [
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "n",
+    "optional": false,
+    "required": true
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "interval",
+    "optional": true,
+    "quantity": "time",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "s"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "exposure",
+    "optional": true,
+    "quantity": "time",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "s"
+   }
+  ],
+  "name": "acq.frames",
+  "version": 1
+ },
+ "data_object:carrier.emitter_density": {
+  "class": "gradix._core.carriers.EmitterDensity",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "S",
+     "Z",
+     "Y",
+     "X"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "data",
+    "optional": false,
+    "quantity": "photons",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "photons"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "S",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelengths",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "S",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "weights",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "grid",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": "AcqIndex(axes=())",
+    "kind": "static",
+    "name": "acq",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.emitter_density",
+  "version": 1
+ },
+ "data_object:carrier.emitter_set": {
+  "class": "gradix._core.carriers.EmitterSet",
+  "fields": [
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N",
+     "3"
+    ],
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "position",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "photons",
+    "optional": false,
+    "quantity": "photons",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "photons"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "presence",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "1",
+     "N"
+    ],
+    "dtype": "integer",
+    "event": [],
+    "kind": "tensor",
+    "name": "species",
+    "optional": true,
+    "quantity": "index_map",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "int64"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "S",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelengths",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "S",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "weights",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N",
+     "6"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "dipole",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "1",
+     "N"
+    ],
+    "dtype": "integer",
+    "event": [],
+    "kind": "tensor",
+    "name": "id",
+    "optional": true,
+    "quantity": "index_map",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "int64"
+   },
+   {
+    "choices": null,
+    "default": "AcqIndex(axes=())",
+    "kind": "static",
+    "name": "acq",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.emitter_set",
+  "version": 1
+ },
+ "data_object:carrier.field": {
+  "class": "gradix._core.carriers.Field",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "M",
+     "L",
+     "P",
+     "*",
+     "*"
+    ],
+    "dtype": "complex",
+    "event": [],
+    "kind": "tensor",
+    "name": "scattered",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "background",
+    "optional": true,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "grid",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": [
+     "space",
+     "angular"
+    ],
+    "default": "space",
+    "kind": "static",
+    "name": "domain",
+    "optional": false,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "z_ref",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "shared",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "choices": [
+     1,
+     -1
+    ],
+    "default": 1,
+    "kind": "static",
+    "name": "travel",
+    "optional": false,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "M",
+     "2"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "residual_tilt",
+    "optional": true,
+    "quantity": "frequency",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "cycles/\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 1.0,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "n_medium",
+    "optional": false,
+    "quantity": "index",
+    "required": false,
+    "role": "any",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelengths",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "weights",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "M"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "mode_weights",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "choices": [
+     "scalar",
+     "jones",
+     "cartesian"
+    ],
+    "default": "scalar",
+    "kind": "static",
+    "name": "basis",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.field",
+  "version": 1
+ },
+ "data_object:carrier.gaussian_sheet": {
+  "class": "gradix._core.carriers.GaussianSheet",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "irradiance",
+    "optional": false,
+    "quantity": "irradiance",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b2"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "waist",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "center",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "focus",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelengths",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "choices": [
+     "x",
+     "y"
+    ],
+    "default": "x",
+    "kind": "static",
+    "name": "axis",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.gaussian_sheet",
+  "version": 1
+ },
+ "data_object:carrier.irradiance": {
+  "class": "gradix._core.carriers.Irradiance",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "L|1",
+     "Y",
+     "X"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "data",
+    "optional": false,
+    "quantity": "photons",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "photons"
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "grid",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": "AcqIndex(axes=())",
+    "kind": "static",
+    "name": "acq",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.irradiance",
+  "version": 1
+ },
+ "data_object:carrier.object_spectra": {
+  "class": "gradix._core.carriers.ObjectSpectra",
+  "fields": [
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "evaluator",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "params",
+    "optional": false,
+    "required": true
+   },
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N",
+     "3"
+    ],
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "position",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "presence",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "choices": [
+     1,
+     -1
+    ],
+    "default": 1,
+    "kind": "static",
+    "name": "travel",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.object_spectra",
+  "version": 1
+ },
+ "data_object:carrier.plane_waves": {
+  "class": "gradix._core.carriers.PlaneWaves",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "M",
+     "J",
+     "L",
+     "P"
+    ],
+    "dtype": "complex",
+    "event": [],
+    "kind": "tensor",
+    "name": "amplitude",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "M",
+     "J",
+     "2"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "u",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "L"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelengths",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "z0",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "shared",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "choices": [
+     1,
+     -1
+    ],
+    "default": 1,
+    "kind": "static",
+    "name": "travel",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.plane_waves",
+  "version": 1
+ },
+ "data_object:chain": {
+  "class": "gradix.compose.chain.Chain",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "light",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "illumination_optics",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "scatterers",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "emitters",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "excite",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "imaging",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "references",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "detection_optics",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "detector",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "background",
+    "optional": true,
+    "quantity": "photons",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "photons"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "acquisition",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "environment",
+    "optional": true,
+    "required": false
+   }
+  ],
+  "name": "chain",
+  "version": 1
+ },
+ "data_object:dipole.isotropic": {
+  "class": "gradix.objects.labeling.Isotropic",
+  "fields": [],
+  "name": "dipole.isotropic",
+  "version": 1
+ },
+ "data_object:env.homogeneous": {
+  "class": "gradix.objects.environment.Homogeneous",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "n",
+    "optional": false,
+    "quantity": "index",
+    "required": true,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "1"
+   }
+  ],
+  "name": "env.homogeneous",
+  "version": 1
+ },
+ "data_object:env.layered": {
+  "class": "gradix.objects.environment.LayeredMedium",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "sample",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "coverslip",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "immersion",
+    "optional": false,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 170.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "thickness",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "design_coverslip",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "design_thickness",
+    "optional": true,
+    "quantity": "length",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "env.layered",
+  "version": 2
+ },
+ "data_object:env.turbid_slab": {
+  "class": "gradix.objects.turbid.TurbidSlab",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "attenuation",
+    "optional": false,
+    "quantity": "attenuation",
+    "required": true,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1/\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "blur",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 5.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "diffuse",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "surface",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "env.turbid_slab",
+  "version": 1
+ },
+ "data_object:light.polarization": {
+  "class": "gradix.light.polarization.Polarization",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "complex",
+    "event": [
+     2
+    ],
+    "kind": "tensor",
+    "name": "vector",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "choices": null,
+    "default": false,
+    "kind": "static",
+    "name": "incoherent",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "light.polarization",
+  "version": 1
+ },
+ "data_object:material.cauchy": {
+  "class": "gradix.objects.materials.Cauchy",
+  "fields": [
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "a",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": 0.0,
+    "kind": "static",
+    "name": "b",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": 0.0,
+    "kind": "static",
+    "name": "c",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "material.cauchy",
+  "version": 1
+ },
+ "data_object:material.constant": {
+  "class": "gradix.objects.materials.Constant",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "n",
+    "optional": false,
+    "quantity": "index",
+    "required": true,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "1"
+   }
+  ],
+  "name": "material.constant",
+  "version": 1
+ },
+ "data_object:material.sellmeier": {
+  "class": "gradix.objects.materials.Sellmeier",
+  "fields": [
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "b",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "c",
+    "optional": false,
+    "required": true
+   }
+  ],
+  "name": "material.sellmeier",
+  "version": 1
+ },
+ "data_object:microscope": {
+  "class": "gradix.containers.containers.Microscope",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "objective",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "camera",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "light",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "acquisition",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "background",
+    "optional": true,
+    "quantity": "photons",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "photons"
+   }
+  ],
+  "name": "microscope",
+  "version": 1
+ },
+ "data_object:optics.objective": {
+  "class": "gradix.optics.objective.Objective",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "NA",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "magnification",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "focus",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "setting",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "container": "tuple",
+    "default": [],
+    "kind": "child",
+    "name": "pupil",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "optics.objective",
+  "version": 2
+ },
+ "data_object:params.dipole": {
+  "class": "gradix.interact.dipole.DipoleParams",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "A|1",
+     "N",
+     "L"
+    ],
+    "dtype": "complex",
+    "event": [],
+    "kind": "tensor",
+    "name": "amplitude",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "params.dipole",
+  "version": 1
+ },
+ "data_object:sample": {
+  "class": "gradix.containers.containers.Sample",
+  "fields": [
+   {
+    "container": "mapping",
+    "default": null,
+    "kind": "child",
+    "name": "populations",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "environment",
+    "optional": false,
+    "required": true
+   }
+  ],
+  "name": "sample",
+  "version": 1
+ },
+ "data_object:spectrum": {
+  "class": "gradix.objects.spectrum.Spectrum",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelengths",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "wavelength",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "weights",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "wavelength",
+    "shape_affecting": false,
+    "unit": "1"
+   }
+  ],
+  "name": "spectrum",
+  "version": 1
+ },
+ "element:coherent.pupil": {
+  "class": "gradix.imaging.coherent.Coherent",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "objective",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "camera",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": "auto",
+    "kind": "static",
+    "name": "oversample",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": 64,
+    "kind": "static",
+    "name": "pupil_samples",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "coherent.pupil",
+  "version": 1
+ },
+ "element:detect.camera": {
+  "class": "gradix.detect.camera.Camera",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "pixel_size",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "shape",
+    "optional": false,
+    "required": true
+   },
+   {
+    "components": null,
+    "constraint": "unit_interval",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "qe",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "gain",
+    "optional": false,
+    "quantity": "gain",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "ADU/e\u207b"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "offset",
+    "optional": false,
+    "quantity": "adu",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "ADU"
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "bit_depth",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "noise",
+    "optional": true,
+    "required": false
+   },
+   {
+    "choices": [
+     "adu",
+     "e",
+     "photons"
+    ],
+    "default": "adu",
+    "kind": "static",
+    "name": "unit",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "detect.camera",
+  "version": 1
+ },
+ "element:emit.gaussian": {
+  "class": "gradix.imaging.sprites.Sprites",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "objective",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "camera",
+    "optional": false,
+    "required": true
+   }
+  ],
+  "name": "emit.gaussian",
+  "version": 1
+ },
+ "element:emit.pupil_mft": {
+  "class": "gradix.imaging.point_psf.PointPSF",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "objective",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "camera",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": "auto",
+    "kind": "static",
+    "name": "oversample",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": "auto",
+    "kind": "static",
+    "name": "roi",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": "auto",
+    "kind": "static",
+    "name": "pupil_samples",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": [
+     "auto",
+     "scalar",
+     "vectorial"
+    ],
+    "default": "auto",
+    "kind": "static",
+    "name": "psf",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": 0.7,
+    "kind": "static",
+    "name": "vectorial_above",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": [
+     "roi",
+     "global"
+    ],
+    "default": "roi",
+    "kind": "static",
+    "name": "method",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "emit.pupil_mft",
+  "version": 1
+ },
+ "element:emit.strata_otf": {
+  "class": "gradix.imaging.strata.Strata",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "objective",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "camera",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": "auto",
+    "kind": "static",
+    "name": "oversample",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": "auto",
+    "kind": "static",
+    "name": "pupil_samples",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "turbid",
+    "optional": true,
+    "required": false
+   },
+   {
+    "choices": [
+     "linear",
+     "periodic"
+    ],
+    "default": "linear",
+    "kind": "static",
+    "name": "boundary",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "emit.strata_otf",
+  "version": 3
+ },
+ "element:interact.dipole": {
+  "class": "gradix.interact.dipole.Dipole",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "objects",
+    "optional": false,
+    "required": true
+   }
+  ],
+  "name": "interact.dipole",
+  "version": 1
+ },
+ "element:source.evanescent": {
+  "class": "gradix.light.sources.Evanescent",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "angle",
+    "optional": false,
+    "quantity": "angle",
+    "required": true,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "rad"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 1.518,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "n_glass",
+    "optional": false,
+    "quantity": "index",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "irradiance",
+    "optional": false,
+    "quantity": "irradiance",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b2"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 0.488,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelength",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": false,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "source.evanescent",
+  "version": 1
+ },
+ "element:source.gaussian_sheet": {
+  "class": "gradix.light.sources.Sheet",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "irradiance",
+    "optional": false,
+    "quantity": "irradiance",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b2"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "waist",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "center",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "focus",
+    "optional": false,
+    "quantity": "length",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 0.488,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelength",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": false,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "choices": [
+     "x",
+     "y"
+    ],
+    "default": "x",
+    "kind": "static",
+    "name": "axis",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "source.gaussian_sheet",
+  "version": 1
+ },
+ "element:source.plane_waves": {
+  "class": "gradix.light.plane_wave.PlaneWave",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelength",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": true,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": [
+     "x",
+     "y"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     2
+    ],
+    "kind": "tensor",
+    "name": "direction",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "irradiance",
+    "optional": false,
+    "quantity": "irradiance",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b2"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "polarization",
+    "optional": true,
+    "required": false
+   }
+  ],
+  "name": "source.plane_waves",
+  "version": 1
+ },
+ "element:source.sim_beams": {
+  "class": "gradix.light.sources.SIMBeams",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "period",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "angle",
+    "optional": false,
+    "quantity": "angle",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "rad"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "phase",
+    "optional": false,
+    "quantity": "angle",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "rad"
+   },
+   {
+    "components": null,
+    "constraint": "unit_interval",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "modulation",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "irradiance",
+    "optional": false,
+    "quantity": "irradiance",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b2"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 0.488,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelength",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": false,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "source.sim_beams",
+  "version": 1
+ },
+ "element:source.uniform": {
+  "class": "gradix.light.sources.Uniform",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "irradiance",
+    "optional": false,
+    "quantity": "irradiance",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b2"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 0.488,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "wavelength",
+    "optional": false,
+    "quantity": "wavelength",
+    "required": false,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "source.uniform",
+  "version": 1
+ },
+ "element:transduce.linear": {
+  "class": "gradix.excite.linear.Linear",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 1.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "reference",
+    "optional": false,
+    "quantity": "irradiance",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b2"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "saturation",
+    "optional": true,
+    "quantity": "irradiance",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b2"
+   }
+  ],
+  "name": "transduce.linear",
+  "version": 1
+ },
+ "label:distance_map": {
+  "class": "gradix.labels.maps.DistanceMap",
+  "fields": [
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "population",
+    "optional": false,
+    "required": true
+   }
+  ],
+  "name": "distance_map",
+  "version": 1
+ },
+ "label:emitter_table": {
+  "class": "gradix.labels.maps.EmitterTable",
+  "fields": [
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "population",
+    "optional": false,
+    "required": true
+   }
+  ],
+  "name": "emitter_table",
+  "version": 1
+ },
+ "label:heatmap": {
+  "class": "gradix.labels.maps.Heatmap",
+  "fields": [
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "population",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": 1.0,
+    "kind": "static",
+    "name": "sigma_px",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": false,
+    "kind": "static",
+    "name": "normalize",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "heatmap",
+  "version": 1
+ },
+ "label:instance_mask": {
+  "class": "gradix.labels.maps.InstanceMask",
+  "fields": [
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "population",
+    "optional": false,
+    "required": true
+   }
+  ],
+  "name": "instance_mask",
+  "version": 1
+ },
+ "label:positions": {
+  "class": "gradix.labels.positions.Positions",
+  "fields": [
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "population",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": [
+     "px",
+     "um"
+    ],
+    "default": "px",
+    "kind": "static",
+    "name": "unit",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": [
+     "xy",
+     "xyz"
+    ],
+    "default": "xy",
+    "kind": "static",
+    "name": "dims",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "positions",
+  "version": 1
+ },
+ "label:semantic_mask": {
+  "class": "gradix.labels.maps.SemanticMask",
+  "fields": [
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "population",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "soft",
+    "optional": true,
+    "required": false
+   }
+  ],
+  "name": "semantic_mask",
+  "version": 1
+ },
+ "noise:sensor.emccd": {
+  "class": "gradix.detect.noise.EMCCD",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": 100.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "gain",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "cic",
+    "optional": false,
+    "quantity": "electrons",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "e\u207b"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "read",
+    "optional": false,
+    "quantity": "electrons",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "e\u207b"
+   },
+   {
+    "choices": [
+     "scaled_st",
+     "straight_through"
+    ],
+    "default": "scaled_st",
+    "kind": "static",
+    "name": "estimator",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "sensor.emccd",
+  "version": 1
+ },
+ "noise:sensor.ideal": {
+  "class": "gradix.detect.noise.Ideal",
+  "fields": [
+   {
+    "choices": [
+     "scaled_st",
+     "straight_through"
+    ],
+    "default": "scaled_st",
+    "kind": "static",
+    "name": "estimator",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "sensor.ideal",
+  "version": 1
+ },
+ "noise:sensor.poisson_gaussian": {
+  "class": "gradix.detect.noise.PoissonGaussian",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "read",
+    "optional": false,
+    "quantity": "electrons",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "e\u207b"
+   },
+   {
+    "choices": [
+     "scaled_st",
+     "straight_through"
+    ],
+    "default": "scaled_st",
+    "kind": "static",
+    "name": "estimator",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": [
+     "gaussian",
+     "shifted_poisson",
+     "convolution"
+    ],
+    "default": "gaussian",
+    "kind": "static",
+    "name": "likelihood",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "sensor.poisson_gaussian",
+  "version": 2
+ },
+ "noise:sensor.scmos": {
+  "class": "gradix.detect.noise.SCMOS",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "read",
+    "optional": false,
+    "quantity": "electrons",
+    "required": false,
+    "role": "pixels",
+    "shape_affecting": false,
+    "unit": "e\u207b"
+   },
+   {
+    "choices": [
+     "scaled_st",
+     "straight_through"
+    ],
+    "default": "scaled_st",
+    "kind": "static",
+    "name": "estimator",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": [
+     "gaussian",
+     "shifted_poisson",
+     "convolution"
+    ],
+    "default": "gaussian",
+    "kind": "static",
+    "name": "likelihood",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "sensor.scmos",
+  "version": 2
+ },
+ "object_set:emitters": {
+  "class": "gradix.objects.objectset.Emitters",
+  "fields": [
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "position",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     4
+    ],
+    "kind": "tensor",
+    "name": "rotation",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "unit_interval",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "presence",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "material",
+    "optional": true,
+    "quantity": "index",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "labeling",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "parent",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "integer",
+    "event": [],
+    "kind": "tensor",
+    "name": "id",
+    "optional": true,
+    "quantity": "index_map",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "int64"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "photons",
+    "optional": false,
+    "quantity": "photons",
+    "required": true,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "photons"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "emission",
+    "optional": false,
+    "required": true
+   },
+   {
+    "container": "node",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "dipole",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "emitters",
+  "version": 1
+ },
+ "object_set:spheres": {
+  "class": "gradix.objects.objectset.Spheres",
+  "fields": [
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "position",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     4
+    ],
+    "kind": "tensor",
+    "name": "rotation",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "unit_interval",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "presence",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "material",
+    "optional": true,
+    "quantity": "index",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "labeling",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "parent",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "integer",
+    "event": [],
+    "kind": "tensor",
+    "name": "id",
+    "optional": true,
+    "quantity": "index_map",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "int64"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "radius",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "spheres",
+  "version": 1
+ },
+ "object_set:voxels": {
+  "class": "gradix.objects.volumes.Voxels",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     -1,
+     -1,
+     -1
+    ],
+    "kind": "tensor",
+    "name": "values",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "spacing",
+    "optional": false,
+    "required": true
+   },
+   {
+    "choices": null,
+    "default": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "kind": "static",
+    "name": "origin",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": [
+     "n",
+     "dn",
+     "density"
+    ],
+    "default": "n",
+    "kind": "static",
+    "name": "quantity",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "emission",
+    "optional": true,
+    "required": false
+   }
+  ],
+  "name": "voxels",
+  "version": 1
+ },
+ "pupil_modifier:pixel_pupil": {
+  "class": "gradix.optics.pupil.PixelPupil",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     -1,
+     -1
+    ],
+    "kind": "tensor",
+    "name": "opd",
+    "optional": false,
+    "quantity": "opd",
+    "required": true,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     -1,
+     -1
+    ],
+    "kind": "tensor",
+    "name": "amplitude",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "1"
+   }
+  ],
+  "name": "pixel_pupil",
+  "version": 1
+ },
+ "pupil_modifier:zernike": {
+  "class": "gradix.optics.pupil.Zernike",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     -1
+    ],
+    "kind": "tensor",
+    "name": "coeffs",
+    "optional": false,
+    "quantity": "opd",
+    "required": true,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "indices",
+    "optional": false,
+    "required": true
+   }
+  ],
+  "name": "zernike",
+  "version": 1
+ }
+}

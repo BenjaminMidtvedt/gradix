@@ -1,0 +1,35 @@
+# The quality gates of AGENTS.md on a CPU matrix (docs/architecture.md §11.15).
+# The GPU nightly (throughput targets, full-size level equivalence) runs on the self-hosted 3090.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gates:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.12"]
+    runs-on: ${{ matrix.os }}
+    env:
+      # every uv command of the job (not only the sync) must use the matrix Python; without
+      # this, `uv run` follows .python-version and silently recreates a 3.12 environment
+      UV_PYTHON: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install
+        run: uv sync --locked
+      - name: Interpreter
+        run: uv run python -c "import sys; print(sys.version); assert sys.version.startswith('${{ matrix.python }}')"
+      - name: Lint
+        run: uv run ruff check .
+      - name: Format
+        run: uv run ruff format --check .
+      - name: Types
+        run: uv run ty check
+      - name: Tests (includes the numpydoc gate)
+        run: uv run pytest

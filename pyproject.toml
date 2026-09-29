@@ -1,0 +1,107 @@
+[project]
+name = "gradix"
+version = "0.1.0"
+description = "Differentiable, GPU-accelerated simulation of light-microscopy images, built on PyTorch."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Benjamin Midtvedt", email = "benmid@student.chalmers.se" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "torch>=2.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Local development pulls CUDA builds of torch on Linux/Windows; macOS uses PyPI.
+# These sources only affect `uv sync`/`uv lock` in this repo, not published metadata.
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.pytest.ini_options]
+# Docstring examples are executed too (they are part of the API contract, §11.13).
+testpaths = ["tests", "src/gradix"]
+addopts = "-ra --doctest-modules"
+filterwarnings = [
+    # Unexpected validity warnings fail the suite; tests that expect one use pytest.warns.
+    "error::gradix.GradixWarning",
+    # torch.autograd.gradcheck uses torch.jit.script internally (torch 2.14).
+    "ignore:`torch.jit.script` is deprecated:FutureWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+# Provenance for docs/architecture.md (research briefs, panel proposals and throwaway measurement
+# scripts), kept exactly as written. Ruff also formats the Python examples in docs/architecture.md.
+extend-exclude = ["docs/background"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "NPY", "RUF", "ANN", "D"]
+# Magic methods other than __call__ are self-explanatory; __call__ is checked by numpydoc lint.
+ignore = ["D105"]
+# Physics notation in docstrings and messages is deliberate, not a confusable Latin letter.
+allowed-confusables = ["−", "–", "×", "α", "γ", "ν", "ρ", "σ"]
+
+[tool.ruff.lint.flake8-bugbear]
+# gradix's field specifiers wrap dataclasses.field, so calling them in class bodies is the idiom.
+extend-immutable-calls = [
+    "gradix.schema.fields.field",
+    "gradix.schema.fields.knob",
+    "gradix.schema.fields.child",
+    "gradix.field",
+    "gradix.knob",
+    "gradix.child",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+# The library is fully annotated and documented (numpydoc); tests may omit both.
+"tests/**" = ["ANN", "D"]
+
+[tool.numpydoc_validation]
+# Run as `numpydoc lint` on src/. Extended summaries, See Also and Examples are required by review
+# for the public API (docs/architecture.md §12.7), not by this gate for every helper.
+checks = ["all", "ES01", "SA01", "EX01"]
+exclude = [
+    '\.__init__$',                  # parameters are documented in the class docstring
+    '\._[^_]',                      # private helpers
+    '\.__(?!call__)[a-z_]+__$',     # magic methods other than __call__
+]
+
+[tool.ty.environment]
+# Library code must type-check for every platform, not only the one it is checked on.
+python-platform = "all"
+
+[tool.ty.src]
+# Same scope as ruff: maintained code, not the provenance under docs/background.
+exclude = ["docs/background"]
+
+[tool.ty.terminal]
+error-on-warning = true
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "matplotlib>=3.10.9",
+    "numpydoc>=1.11.0",
+    "pytest>=9.1.1",
+    "ruff>=0.16.8",
+    "scipy>=1.15.3",
+    "tomli>=2.0",
+    "ty>=0.0.84",
+]
