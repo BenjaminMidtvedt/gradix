@@ -13,7 +13,7 @@ from gradix.detect.camera import Camera
 from gradix.objects.environment import Medium
 from gradix.optics.objective import Objective
 
-__all__ = ["ChainOptics", "Reconstruction", "optics_of"]
+__all__ = ["ChainOptics", "Reconstruction", "optics_of", "without_scatterers"]
 
 
 class Reconstruction:
@@ -132,3 +132,31 @@ def optics_of(chain: Chain) -> ChainOptics:
         magnification=magnification,
         shape=(int(camera.shape[0]), int(camera.shape[1])),
     )
+
+
+def without_scatterers(chain: Chain) -> Chain:
+    """Return the Chain with every scatterer switched off: the empty field, rendered alike.
+
+    Each population keeps its objects with presence 0, so the empty render keeps the Chain's
+    precision and static configuration (a Chain emptied of its populations could compute in
+    float32 where the original computes in float64, and a calibration that differs from the
+    frames by rounding biases every reconstruction that divides by it).
+
+    Parameters
+    ----------
+    chain : Chain
+        A coherent Chain.
+
+    Returns
+    -------
+    Chain
+        The Chain whose scattered field is exactly zero.
+    """
+    changes: dict[str, object] = {}
+    for name, element in chain.scatterers.items():
+        field = getattr(element, "population_field", "objects")
+        objects = getattr(element, field, None)
+        if objects is None or not hasattr(objects, "presence"):
+            raise StructureError(f"scatterers[{name!r}] has no population to switch off")
+        changes[name] = element.replace(**{field: objects.replace(presence=0.0)})
+    return chain.replace(scatterers=changes)

@@ -34,6 +34,7 @@ CORE = (
     gradix.PlaneWaves,
     gradix.Field,
     gradix.ObjectSpectra,
+    gradix.DiffractionOrders,
 )
 """Unregistered classes whose schemas are part of the frozen structure (containers, carriers)."""
 

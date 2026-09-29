@@ -29,6 +29,7 @@ __all__ = [
     "Background",
     "Carrier",
     "Contribution",
+    "DiffractionOrders",
     "EmitterDensity",
     "EmitterSet",
     "Field",
@@ -517,6 +518,41 @@ class ObjectSpectra(Carrier):
         quantity="dimensionless", role="carrier", dims=("B|1", "A|1", "N"), default=None
     )
     travel: int = knob(default=1, choices=(1, -1))
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True, eq=False)
+class DiffractionOrders(Carrier):
+    """A detection grating's diffraction orders, formed analytically by coherent imaging (ADR-45).
+
+    A periodic mask ``t(r) = Σ_o c_o·e^{i2πG_o·r}`` a distance d before the camera turns the
+    image field into one copy per order: tilted by G_o and propagated over d, which shears
+    it by λd·G_o. The consumer applies each order as a pupil phase and a carrier on the
+    camera grid, so no field is sampled at the grating (§5.12).
+
+    Parameters
+    ----------
+    frequencies : Tensor
+        ``[B|1, O, 2]`` spatial frequencies G_o of the orders, cycles/µm, in image space (µm on
+        the camera side, along the camera's x and y).
+    coefficients : Tensor
+        Complex ``[B|1, O, L]`` Fourier coefficients c_o of the mask's transmission per
+        wavelength bin.
+    distance : Tensor
+        ``[B|1]`` distance from the grating to the camera, µm.
+    focused : {"camera", "grating"}, default "camera"
+        The plane conjugate to the objective's focal plane: the camera (each order is an
+        in-focus sheared copy) or the grating (the copies are defocused by d).
+    """
+
+    registry_name: ClassVar[str | None] = "carrier.diffraction_orders"
+    """Stable name for signatures and saved inputs."""
+
+    frequencies: Tensor = field(quantity="frequency", role="carrier", dims=("B|1", "O", 2))
+    coefficients: Tensor = field(
+        quantity="dimensionless", role="carrier", dims=("B|1", "O", "L"), dtype="complex"
+    )
+    distance: Tensor = field(quantity="length", role="carrier", dims=("B|1",))
+    focused: str = knob(default="camera", choices=("camera", "grating"))
 
 
 Contribution = Field | ObjectSpectra | PlaneWaves

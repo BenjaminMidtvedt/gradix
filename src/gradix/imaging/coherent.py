@@ -18,6 +18,12 @@ C = t·√(Re k_z,i/k_s). Transmitted illumination (travel +1) is defined in the
 crosses the stack the same way. Epi illumination (travel −1) is defined in the coverslip: its
 reflection at the sample interface is the analytic reference of iSCAT, and its transmission
 into the sample illuminates the scatterers. Magnification maps object space onto the camera.
+
+A detection grating (:class:`~gradix.DiffractionOrders`, ADR-45) turns the image field into one
+copy per diffraction order before the camera: each order's coefficient and its propagation to
+the camera are a phase on the pupil samples (and on every background wave), its tilt a carrier
+on the camera grid, so each order costs one matrix Fourier transform and nothing is sampled at
+the grating.
 """
 
 from __future__ import annotations
@@ -31,7 +37,7 @@ import torch
 from torch import Tensor
 
 from gradix import register
-from gradix._core.carriers import Irradiance, ObjectSpectra, PlaneWaves
+from gradix._core.carriers import DiffractionOrders, Irradiance, ObjectSpectra, PlaneWaves
 from gradix._core.contract import (
     Capabilities,
     Description,
@@ -53,6 +59,7 @@ from gradix.objects.environment import LayeredMedium, Medium
 from gradix.objects.objectset import ObjectSet
 from gradix.ops import pupil as ops
 from gradix.optics import fresnel
+from gradix.optics.grating import Grating
 from gradix.optics.objective import Objective
 from gradix.optics.pupil import PupilContext, PupilModifier
 from gradix.schema.base import Node
@@ -191,8 +198,14 @@ class Coherent(Element[Irradiance]):
         wl = envelope.range("light.wavelength") or envelope.range("light.wavelengths")
         wl = wl or (0.5, 0.5)
         u_ref = self._reference_u(desc, envelope)
+        separation = self._order_separation(desc, envelope, wl[0])
         _spacing, s, decision = detection_spacing(
-            pitch, wl[0], na, reference_u=u_ref, oversample=self.oversample
+            pitch,
+            wl[0],
+            na,
+            reference_u=u_ref,
+            separation=separation,
+            oversample=self.oversample,
         )
         grid = Grid2D(tuple(self.camera.shape), pitch, (0.0, 0.0))
         medium = desc.nodes.get(desc.part("environment")) or desc.nodes.get("environment")
@@ -228,7 +241,7 @@ class Coherent(Element[Irradiance]):
         list of Violation
             Findings.
         """
-        found = self._reference_validity(desc, envelope)
+        found = self._reference_validity(desc, envelope) + self._grating_validity(desc, envelope)
         medium = desc.nodes.get(desc.part("environment")) or desc.nodes.get("environment")
         if not isinstance(medium, Medium):
             return found
@@ -336,6 +349,83 @@ class Coherent(Element[Irradiance]):
                 )
         return found
 
+    @staticmethod
+    def _gratings(desc: Description) -> dict[str, Grating | DiffractionOrders]:
+        """Return the detection gratings among the nodes (DiffractionOrders in eager calls)."""
+        kinds = (Grating, DiffractionOrders)
+        return {k: v for k, v in desc.nodes.items() if isinstance(v, kinds)}
+
+    def _order_separation(
+        self, desc: Description, envelope: Envelope, wavelength_min: float
+    ) -> float | None:
+        """Return the largest direction difference of two orders' copies, NA units: λ·Mag·|ΔG|."""
+        gratings = self._gratings(desc)
+        if not gratings:
+            return None
+        mag = float(self._number("magnification", self.objective, envelope, "objective", "hi"))
+        spread = 0.0  # the largest |G_o − G_p| over pairs of orders, cycles/µm on the camera side
+        for name, node in gratings.items():
+            if isinstance(node, Grating):
+                period = float(self._number("period", node, envelope, name, pick="lo"))
+                mn = torch.tensor(node.indices(), dtype=torch.float64)
+                spread = max(spread, float(torch.cdist(mn, mn).max()) / (2.0 * period))
+            else:
+                g = node.frequencies.detach().to(torch.float64)
+                g = g.reshape(-1, g.shape[-2], 2)
+                spread = max(spread, float(torch.cdist(g, g).max()))
+        return wavelength_min * mag * spread
+
+    def _grating_validity(self, desc: Description, envelope: Envelope) -> list[Violation]:
+        """Refuse a grating with a reference; warn when the camera undersamples its fringes."""
+        gratings = self._gratings(desc)
+        if not gratings:
+            return []
+        where = desc.path or "coherent"
+        found: list[Violation] = []
+        if len(gratings) > 1:
+            found.append(
+                Violation(
+                    "error",
+                    f"{len(gratings)} detection gratings: one grating per Chain (ADR-45)",
+                    element=where,
+                    fix="keep one gx.optics.Grating in detection_optics",
+                )
+            )
+        if any(isinstance(v, ReferenceBeam) for v in desc.nodes.values()):
+            found.append(
+                Violation(
+                    "error",
+                    "a detection grating and an image-side reference together are not modelled",
+                    element=where,
+                    fix="drop the reference: the grating's orders interfere with each other",
+                )
+            )
+        pixel = float(self._number("pixel_size", self.camera, envelope, "camera", pick="hi"))
+        mag = float(self._number("magnification", self.objective, envelope, "objective"))
+        na = float(self._number("NA", self.objective, envelope, "objective", pick="hi"))
+        wl = envelope.range("light.wavelength") or envelope.range("light.wavelengths")
+        wl_min = wl[0] if wl is not None else 0.5
+        for name, node in gratings.items():
+            if not isinstance(node, Grating):
+                continue
+            period = float(self._number("period", node, envelope, name, pick="lo"))
+            fringe = 1.0 / period + na / (wl_min * mag)  # the fringes' sideband edge, camera side
+            nyquist = 1.0 / (2.0 * pixel)
+            if fringe > nyquist:
+                found.append(
+                    Violation(
+                        "warn",
+                        f"the camera undersamples {name!r}'s fringes: the sideband reaches "
+                        f"{fringe:.3g} cycles/µm beyond the pixels' band edge {nyquist:.3g}",
+                        entry=f"{name}.period",
+                        value=fringe,
+                        limit=nyquist,
+                        element=where,
+                        fix="a longer period (≳ 3 pixels) or more magnification",
+                    )
+                )
+        return found
+
     def _reference_u(self, desc: Description, envelope: Envelope) -> float | None:
         """Return the largest object-space direction |u_ref| = Mag·|sin θ| of the references."""
         references = {k: v for k, v in desc.nodes.items() if isinstance(v, ReferenceBeam)}
@@ -398,7 +488,7 @@ class Coherent(Element[Irradiance]):
         return found
 
     def memory(self, desc: Description, static: Static) -> int | None:
-        """Estimate the per-image peak bytes: the pupil work and one field per sphere.
+        """Estimate the per-image peak bytes: the pupil work and one field per sphere and order.
 
         Parameters
         ----------
@@ -417,8 +507,14 @@ class Coherent(Element[Irradiance]):
         spheres = sum(desc.slots.values()) or 1  # every scatterer population's slots
         pupil = static.pupil_samples
         height, width = (static.oversample * n for n in static.grid.shape)
-        per_sphere = 128 * pupil * pupil + 24 * height * width + 16 * pupil * max(height, width)
-        return int(desc.frames * desc.bins * (spheres * per_sphere + 32 * height * width))
+        orders = max(
+            (len(g.indices()) for g in self._gratings(desc).values() if isinstance(g, Grating)),
+            default=1,
+        )  # autograd keeps every order's pupil and field
+        transform = 16 * pupil * pupil + 24 * height * width + 16 * pupil * max(height, width)
+        per_sphere = 112 * pupil * pupil + orders * transform
+        field = 32 * height * width * orders
+        return int(desc.frames * desc.bins * (spheres * per_sphere + field))
 
     def _number(
         self, name: str, node: Node, envelope: Envelope, part: str, pick: str = "lo"
@@ -438,7 +534,8 @@ class Coherent(Element[Irradiance]):
         Parameters
         ----------
         *inputs : object
-            The contributions, the plane waves and the medium.
+            The contributions, the plane waves, the medium, and optionally the references and
+            the detection stages (as for :meth:`forward`).
         envelope : Envelope, optional
             Unused: the configuration reads the element's values directly.
 
@@ -458,6 +555,8 @@ class Coherent(Element[Irradiance]):
             u = reference.u.detach().to(torch.float64).reshape(-1, 2).abs().max(0).values
             ax, ay = (math.asin(min(float(v), 1.0)) for v in u)
             nodes[f"reference{i}"] = ReferenceBeam(angle=torch.tensor([ax, ay]))
+        for i, orders in enumerate(self._as_stages(inputs[4] if len(inputs) > 4 else ())):
+            nodes[f"grating{i}"] = orders
         desc = Description(nodes=nodes)
         report(self.validity(desc, Envelope(entries)), "warn")  # errors raise
         return self.configure(desc, Envelope(entries))
@@ -472,6 +571,16 @@ class Coherent(Element[Irradiance]):
             return references
         raise StructureError("references must be PlaneWaves or a tuple of them")
 
+    @staticmethod
+    def _as_stages(stages: object) -> tuple[DiffractionOrders, ...]:
+        if stages is None:
+            return ()
+        if isinstance(stages, DiffractionOrders):
+            return (stages,)
+        if isinstance(stages, tuple) and all(isinstance(g, DiffractionOrders) for g in stages):
+            return stages
+        raise StructureError("detection stages must be DiffractionOrders or a tuple of them")
+
     # ---- run time ---------------------------------------------------------------------------
 
     def forward(self, *inputs: object, static: Static) -> Irradiance:
@@ -481,9 +590,10 @@ class Coherent(Element[Irradiance]):
         ----------
         *inputs : object
             The contributions (an :class:`~gradix.ObjectSpectra` or a tuple of them), the
-            incident :class:`~gradix.PlaneWaves`, the medium, and optionally the image-side
+            incident :class:`~gradix.PlaneWaves`, the medium, optionally the image-side
             references (:class:`~gradix.PlaneWaves` from :class:`~gradix.light.ReferenceBeam`,
-            one or a tuple).
+            one or a tuple), and optionally the detection stages (the
+            :class:`~gradix.DiffractionOrders` of a :class:`~gradix.optics.Grating`).
         static : Static
             A :class:`CoherentStatic`.
 
@@ -492,8 +602,13 @@ class Coherent(Element[Irradiance]):
         Irradiance
             ``[B, A, 1, H, W]`` photons per pixel.
         """
-        background, scattered, optics, static = self._fields(inputs[:3], static)
         references = self._as_references(inputs[3] if len(inputs) > 3 else ())
+        stages = self._as_stages(inputs[4] if len(inputs) > 4 else ())
+        if len(stages) > 1 or (stages and references):
+            msg = "Coherent forms one detection grating, without image-side references"
+            raise StructureError(msg, fix="keep one gx.optics.Grating and drop the references")
+        orders = stages[0] if stages else None
+        background, scattered, optics, static = self._fields(inputs[:3], static, orders)
         # explicit interference, term by term: weak scatterers keep their contrast (§4.4)
         intensity = background.real**2 + background.imag**2
         if scattered is not None:
@@ -514,7 +629,7 @@ class Coherent(Element[Irradiance]):
         assert static.grid is not None
         return Irradiance(data=pixels[:, :, None], grid=static.grid)
 
-    def image_field(self, *inputs: object, static: Static) -> Tensor:
+    def image_field(self, *inputs: object, static: Static, part: str = "total") -> Tensor:
         """Return the complex image field on the camera's samples, background included.
 
         Parameters
@@ -523,19 +638,31 @@ class Coherent(Element[Irradiance]):
             As for :meth:`forward`: the contributions, the plane waves and the medium.
         static : Static
             A :class:`CoherentStatic`.
+        part : {"total", "background"}, default "total"
+            The whole field, or its unscattered part alone, computed at the precision the
+            contributions set (so the two divide without rounding bias).
 
         Returns
         -------
         Tensor
             Complex ``[B, A, M, L, H·s, W·s]`` in √(photons/µm²), s the oversampling: the field
-            whose squared magnitude, summed over modes and bins, is the image before the
-            pixel MTF.
+            in the plane conjugate to the focal plane, before any detection grating and
+            without references, whose squared magnitude, summed over modes and bins, is the
+            image before the pixel MTF.
         """
-        background, scattered, _optics, _static = self._fields(inputs[:3], static)
+        if part not in ("total", "background"):
+            raise StructureError(f"part must be 'total' or 'background', not {part!r}")
+        scatter = part == "total"
+        background, scattered, _optics, _static = self._fields(inputs[:3], static, scatter=scatter)
         return background if scattered is None else background + scattered
 
     def _fields(
-        self, inputs: tuple[object, ...], static: Static
+        self,
+        inputs: tuple[object, ...],
+        static: Static,
+        orders: DiffractionOrders | None = None,
+        *,
+        scatter: bool = True,
     ) -> tuple[Tensor, Tensor | None, _Optics, CoherentStatic]:
         if len(inputs) != 3:
             raise StructureError("Coherent takes (contributions, PlaneWaves, medium)")
@@ -551,14 +678,14 @@ class Coherent(Element[Irradiance]):
         if not isinstance(static, CoherentStatic) or static.grid is None:
             raise StructureError("Coherent needs a CoherentStatic")
         optics = self._optics(contributions, waves, medium, static)
-        background = self._background(waves, medium, optics, static)
+        background = self._background(waves, medium, optics, static, orders)
         scattered: Tensor | None = None
         for contribution in contributions:
             if not isinstance(contribution, ObjectSpectra):
                 raise StructureError(f"Coherent cannot image a {type(contribution).__name__}")
-            if contribution.position.shape[2] == 0:
+            if contribution.position.shape[2] == 0 or not scatter:
                 continue  # no scatterers: the background alone
-            field = self._scattered(contribution, waves, medium, optics, static)
+            field = self._scattered(contribution, waves, medium, optics, static, orders)
             scattered = field if scattered is None else scattered + field
         return background, scattered, optics, static
 
@@ -651,12 +778,17 @@ class Coherent(Element[Irradiance]):
         return total.permute(0, 2, 3, 4, 1).to(o.cdtype)  # [B, A, M, J, L]
 
     def _background(
-        self, waves: PlaneWaves, medium: Medium, o: _Optics, static: CoherentStatic
+        self,
+        waves: PlaneWaves,
+        medium: Medium,
+        o: _Optics,
+        static: CoherentStatic,
+        orders: DiffractionOrders | None = None,
     ) -> Tensor:
         """Return the background plane waves on the camera samples, ``[B, A, M, L, Hs, Ws]``."""
         if o.layered:
             assert isinstance(medium, LayeredMedium)
-            return self._background_layered(waves, medium, o, static)
+            return self._background_layered(waves, medium, o, static, orders)
         dtype, device = o.dtype, o.device
         n = o.n.reshape(-1, 1, 1, 1, 1)
         na = o.na.reshape(-1, 1, 1, 1, 1)
@@ -683,10 +815,15 @@ class Coherent(Element[Irradiance]):
         modifiers = self._modifiers_at(u, medium, o)
         if modifiers is not None:
             amp = amp * modifiers
-        return self._on_camera(amp, u, o)
+        return self._on_camera(amp, u, o, orders)
 
     def _background_layered(
-        self, waves: PlaneWaves, medium: LayeredMedium, o: _Optics, static: CoherentStatic
+        self,
+        waves: PlaneWaves,
+        medium: LayeredMedium,
+        o: _Optics,
+        static: CoherentStatic,
+        orders: DiffractionOrders | None = None,
     ) -> Tensor:
         """Return the background through a layered medium: transmitted light or the epi echo."""
         dtype, device = o.dtype, o.device
@@ -721,7 +858,7 @@ class Coherent(Element[Irradiance]):
         modifiers = self._modifiers_at(u, medium, o)
         if modifiers is not None:
             amp = amp * modifiers
-        return self._on_camera(amp, u, o)
+        return self._on_camera(amp, u, o, orders)
 
     def _incident(self, waves: PlaneWaves, pos: Tensor, o: _Optics) -> Tensor:
         """Return each incident wave at the spheres, in the sample: ``[B, A, M, J, L, N]``.
@@ -770,12 +907,30 @@ class Coherent(Element[Irradiance]):
         kz_pair = torch.stack([kzs[:, :, :, 0], kzi[:, :, :, 0]])  # drop J: [2, B, A, M, L, N, K]
         return c_s, c_p, kz_pair
 
-    def _on_camera(self, amp: Tensor, u: Tensor, o: _Optics) -> Tensor:
+    def _on_camera(
+        self, amp: Tensor, u: Tensor, o: _Optics, orders: DiffractionOrders | None = None
+    ) -> Tensor:
         """Sum plane waves on the camera samples: ``[B, A, M, L, Hs, Ws]``.
 
         ``amp [B, A, M, J, L]`` are the waves' amplitudes and ``u [B, A, M, J, 2]`` their
-        object-space directions.
+        object-space directions. With a grating, every wave splits into the orders: each
+        copy's amplitude takes the order's coefficient and propagation phase at the wave's
+        direction, and its tilt is a carrier on the camera grid.
         """
+        if orders is not None:
+            u64 = u.to(torch.float64)
+            wl = o.lam.to(torch.float64)[:, None, None, None, :]  # [B|1, 1, 1, 1, L]
+            mag = o.magnification.to(torch.float64).reshape(-1, 1, 1, 1, 1)
+            fx = u64[..., 0][..., None] / (wl * mag)  # image-side frequencies, cycles/µm
+            fy = u64[..., 1][..., None] / (wl * mag)
+            total: Tensor | None = None
+            for k in range(orders.frequencies.shape[1]):
+                factor = self._order_factor(fx, fy, wl, orders, k, rank=5, bins=4)
+                field = self._on_camera(amp * factor.to(amp.dtype), u, o)
+                field = field * self._carrier(orders, k, o)
+                total = field if total is None else total + field
+            assert total is not None
+            return total
         wl = o.lam[:, None, None, None, :]  # [B|1, 1, 1, 1, L]
         k0 = (2.0 * math.pi / wl)[..., None]  # [B|1, 1, 1, 1, L, 1]
         ux, uy = u[..., 0][..., None, None], u[..., 1][..., None, None]  # [B, A, M, J, 1, 1]
@@ -784,6 +939,62 @@ class Coherent(Element[Irradiance]):
         wave_x = torch.polar(torch.ones_like(phx), phx)  # [B, A, M, J, L, Ws]
         wave_y = torch.polar(torch.ones_like(phy), phy)  # [B, A, M, J, L, Hs]
         return torch.einsum("bamjl,bamjly,bamjlx->bamlyx", amp, wave_y, wave_x)
+
+    @staticmethod
+    def _order_factor(
+        fx: Tensor,
+        fy: Tensor,
+        wl: Tensor,
+        orders: DiffractionOrders,
+        k: int,
+        rank: int,
+        bins: int,
+    ) -> Tensor:
+        """Return order k's coefficient times its propagation to the camera, at frequencies f.
+
+        ``fx``, ``fy`` are image-side frequencies (cycles/µm, fp64) and ``wl`` the wavelengths,
+        broadcastable, of ``rank`` dimensions with the image axis first and the wavelength
+        bins on axis ``bins``. The exact angular-spectrum phase of the copy over d is
+        2πd·√(1/λ² − |f + G|²), relative to the image plane's 2πd·√(1/λ² − |f|²) when the
+        camera is in focus (a shear and a constant: ≈ −2πλd·f·G − πλd|G|²), or to the
+        constant 2πd/λ when the grating is; both differences are formed without cancellation.
+        """
+        shape = (-1,) + (1,) * (rank - 1)
+        device = fx.device  # the orders follow the scene (a grating of Python numbers is on CPU)
+        g = orders.frequencies[:, k].to(device=device, dtype=torch.float64)
+        gx, gy = g[:, 0].reshape(shape), g[:, 1].reshape(shape)
+        d = orders.distance.to(device=device, dtype=torch.float64).reshape(shape)
+        a = 1.0 / (wl * wl)
+        x = (fx + gx) ** 2 + (fy + gy) ** 2
+        root_x = torch.sqrt(torch.clamp(a - x, min=0.0))
+        if orders.focused == "camera":
+            y = fx * fx + fy * fy
+            root_y = torch.sqrt(torch.clamp(a - y, min=0.0))
+            delta = (y - x) / (root_x + root_y)
+        else:
+            delta = -x / (root_x + torch.sqrt(a))
+        phase = torch.remainder(2.0 * math.pi * d * delta, 2.0 * math.pi)
+        c = orders.coefficients[:, k, :].to(device)  # [B|1, L]
+        target = [1] * rank
+        target[0], target[bins] = c.shape[0], c.shape[1]
+        return torch.polar(torch.ones_like(phase), phase) * c.reshape(target).to(torch.complex128)
+
+    @staticmethod
+    def _carrier(orders: DiffractionOrders, k: int, o: _Optics) -> Tensor:
+        """Return order k's tilt on the camera samples, ``[B|1, 1, 1, 1, Hs, Ws]``.
+
+        The order's frequency G on the camera side is Mag·G in the samples' object-space
+        coordinates; the phase is formed in fp64 and reduced mod 2π before the cast.
+        """
+        g = orders.frequencies[:, k, :].to(device=o.device, dtype=torch.float64)  # [B|1, 2]
+        mag = o.magnification.to(torch.float64).reshape(-1, 1)
+        xs, ys = o.xs.to(torch.float64), o.ys.to(torch.float64)  # [B|1, Ws], [B|1, Hs]
+        phase_x = torch.remainder(2.0 * math.pi * mag * g[:, :1] * xs, 2.0 * math.pi)
+        phase_y = torch.remainder(2.0 * math.pi * mag * g[:, 1:] * ys, 2.0 * math.pi)
+        cx = torch.polar(torch.ones_like(phase_x), phase_x).to(o.cdtype)
+        cy = torch.polar(torch.ones_like(phase_y), phase_y).to(o.cdtype)
+        carrier = cy[:, :, None] * cx[:, None, :]  # [B|1, Hs, Ws]
+        return carrier[:, None, None, None]
 
     def _references(self, references: tuple[PlaneWaves, ...], o: _Optics) -> Tensor:
         """Return the image-side references on the camera samples, ``[B, A, 1, L, Hs, Ws]``.
@@ -808,6 +1019,7 @@ class Coherent(Element[Irradiance]):
         medium: Medium,
         o: _Optics,
         static: CoherentStatic,
+        orders: DiffractionOrders | None = None,
     ) -> Tensor:
         """Return one producer's scattered field on the camera samples, ``[B, A, M, L, Hs, Ws]``.
 
@@ -897,13 +1109,29 @@ class Coherent(Element[Irradiance]):
             pupil = pupil * modifiers.to(cdtype)[:, :, None, :, None]
         pupil = pupil.to(cdtype) * strength  # [B, A, M, L, N, P, P]
         batch = pupil.shape[:5]
-        flat = pupil.reshape(-1, samples, samples)
-        g = flat.shape[0]
+        g = math.prod(batch)
         wl_g = o.lam.reshape(o.lam.shape[0], 1, 1, -1, 1).expand(*batch).reshape(-1)
         dx_s = o.xs.reshape(o.xs.shape[0], 1, 1, 1, 1, -1) - pos[..., 0][:, :, None, None, :, None]
         dy_s = o.ys.reshape(o.ys.shape[0], 1, 1, 1, 1, -1) - pos[..., 1][:, :, None, None, :, None]
         dx_s = dx_s.expand(*batch, dx_s.shape[-1]).reshape(g, -1)
         dy_s = dy_s.expand(*batch, dy_s.shape[-1]).reshape(g, -1)
-        field = ops.mft_roi(flat, up, du, wl_g, dx_s, dy_s)
-        field = field.reshape(*batch, dy_s.shape[-1], dx_s.shape[-1])
-        return field.sum(4)  # superpose the spheres: [B, A, M, L, Hs, Ws]
+
+        def to_camera(p: Tensor) -> Tensor:  # superpose the spheres: [B, A, M, L, Hs, Ws]
+            field = ops.mft_roi(p.reshape(-1, samples, samples), up, du, wl_g, dx_s, dy_s)
+            return field.reshape(*batch, dy_s.shape[-1], dx_s.shape[-1]).sum(4)
+
+        if orders is None:
+            return to_camera(pupil)
+        # each order: its coefficient and propagation on the pupil samples, then its tilt
+        wl7 = o.lam.to(torch.float64).reshape(o.lam.shape[0], 1, 1, o.lam.shape[1], 1, 1, 1)
+        mag7 = o.magnification.to(torch.float64).reshape(-1, 1, 1, 1, 1, 1, 1)
+        u64 = u.to(torch.float64)
+        fy, fx = torch.meshgrid(u64, u64, indexing="ij")  # [P, P] object-space directions
+        fx, fy = fx / (wl7 * mag7), fy / (wl7 * mag7)  # [B|1, 1, 1, L, 1, P, P]
+        total: Tensor | None = None
+        for k in range(orders.frequencies.shape[1]):
+            factor = self._order_factor(fx, fy, wl7, orders, k, rank=7, bins=3).to(cdtype)
+            field = to_camera(pupil * factor) * self._carrier(orders, k, o)
+            total = field if total is None else total + field
+        assert total is not None
+        return total

@@ -167,6 +167,8 @@ class Plan:
             emitters=dict(sample.populations),
             excite=excite,
             imaging=imaging,
+            references=dict(microscope.references),  # refused by the executor: not coherent
+            detection_optics=dict(microscope.detection_optics),
             camera=microscope.camera,
             background=microscope.background,
             acquisition=microscope.acquisition,
@@ -191,6 +193,7 @@ class Plan:
             light=microscope.light,
             scatterers=scatterers,
             references=dict(microscope.references),
+            detection_optics=dict(microscope.detection_optics),
             imaging=build("coherent.pupil", parts, self.fidelity),
             background=microscope.background,
             acquisition=microscope.acquisition,

@@ -11,7 +11,7 @@ from torch import Tensor
 from gradix._core.errors import StructureError
 from gradix.compose.chain import Chain
 from gradix.light.reference import ReferenceBeam
-from gradix.recon.base import Reconstruction, optics_of
+from gradix.recon.base import Reconstruction, optics_of, without_scatterers
 
 __all__ = ["OffAxis"]
 
@@ -122,7 +122,7 @@ class OffAxis(Reconstruction):
             raise StructureError("the reference's irradiance and phase must be one number")
         background = None
         if normalize:
-            empty = chain.replace(scatterers={}, references={})
+            empty = without_scatterers(chain).replace(references={})
             field = empty(outputs={"E": _field(normalize="none")})
             background = field["E"].detach()
         return cls(

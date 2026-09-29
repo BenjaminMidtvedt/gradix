@@ -91,6 +91,9 @@ class Microscope(Node):
         Background photons per pixel per exposure.
     references : Mapping[str, Element], optional
         Reference beams by name (off-axis holography, M3a), in the order they join the light.
+    detection_optics : Mapping[str, Element], optional
+        Stages between the objective and the camera by name: a detection grating
+        (``gx.optics.Grating``, QWLSI, M3a); the sampled stages arrive in M3.
 
     Examples
     --------
@@ -106,8 +109,8 @@ class Microscope(Node):
 
     registry_name: ClassVar[str | None] = "microscope"
     """Stable name for signatures and saved inputs."""
-    schema_version: ClassVar[int] = 2
-    """2: reference beams (M3a)."""
+    schema_version: ClassVar[int] = 3
+    """2: reference beams (M3a); 3: detection stages (M3a)."""
 
     objective: Objective = child(doc="the objective")
     camera: Camera = child(doc="the camera")
@@ -118,6 +121,9 @@ class Microscope(Node):
     )
     references: Mapping[str, Element] = child(
         container="mapping", default_factory=dict, ordered=True, doc="reference beams by name"
+    )
+    detection_optics: Mapping[str, Element] = child(
+        container="mapping", default_factory=dict, ordered=True, doc="stages after the objective"
     )
 
     def __post_init__(self) -> None:
@@ -132,8 +138,8 @@ class Microscope(Node):
         Returns
         -------
         dict of str to Node
-            ``objective``, ``camera`` and, when present, ``light``, ``acquisition`` and the
-            references by name.
+            ``objective``, ``camera`` and, when present, ``light``, ``acquisition``, the
+            references and the detection stages by name.
         """
         out: dict[str, Node] = {"objective": self.objective, "camera": self.camera}
         if self.light is not None:
@@ -141,4 +147,5 @@ class Microscope(Node):
         if self.acquisition is not None:
             out["acquisition"] = self.acquisition
         out.update(self.references)
+        out.update(self.detection_optics)
         return out

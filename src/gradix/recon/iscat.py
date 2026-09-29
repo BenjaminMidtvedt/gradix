@@ -9,7 +9,7 @@ from torch import Tensor
 
 from gradix._core.errors import StructureError
 from gradix.compose.chain import Chain
-from gradix.recon.base import Reconstruction
+from gradix.recon.base import Reconstruction, without_scatterers
 
 __all__ = ["ISCATContrast"]
 
@@ -48,7 +48,7 @@ class ISCATContrast(Reconstruction):
         ISCATContrast
             The reconstruction.
         """
-        empty = chain.replace(scatterers={})
+        empty = without_scatterers(chain)
         return cls(reference=empty(outputs=("expected",))["expected"].detach())
 
     def linear(self, frames: Tensor) -> Tensor:

@@ -61,6 +61,7 @@ from gradix import (
 )
 from gradix._core.axes import AcqIndex
 from gradix._core.carriers import (
+    DiffractionOrders,
     EmitterDensity,
     EmitterSet,
     Field,
@@ -137,6 +138,7 @@ __all__ = [
     "Cylinders",
     "DataObject",
     "Description",
+    "DiffractionOrders",
     "Edge",
     "Element",
     "Ellipsoids",

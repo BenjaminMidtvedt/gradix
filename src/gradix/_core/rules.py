@@ -95,13 +95,15 @@ def detection_spacing(
     na: float,
     *,
     reference_u: float | None = None,
+    separation: float | None = None,
     oversample: int | str = "auto",
 ) -> tuple[float, int, Decision]:
     """Return the detection spacing: the pitch over the smallest integer that meets Nyquist.
 
     The intensity band is ``max|u_a − u_b|/λ`` over interfering pairs: 2NA for scattered light,
-    ``|u_ref| + NA`` with an image-side reference (§4.3). The spacing must be at most
-    ``λ_min / (2·band)``, which is λ/(4NA) without a reference.
+    ``|u_ref| + NA`` with an image-side reference (§4.3), and ``separation + 2NA`` for copies of
+    the image field whose directions differ by ``separation`` (a detection grating's orders).
+    The spacing must be at most ``λ_min / (2·band)``, which is λ/(4NA) without either.
 
     Parameters
     ----------
@@ -113,6 +115,9 @@ def detection_spacing(
         Detection numerical aperture.
     reference_u : float, optional
         ``|u_ref|`` of an image-side reference.
+    separation : float, optional
+        The largest direction difference between interfering copies of the image field, NA
+        units at ``wavelength_min`` (λ·Mag·|G_o − G_p| over pairs of a grating's orders).
     oversample : int or "auto", default "auto"
         A pinned factor s, or ``"auto"`` for the smallest s that meets the rule.
 
@@ -122,6 +127,8 @@ def detection_spacing(
         The spacing (µm), the factor s and the decision record.
     """
     band = 2.0 * na if reference_u is None else max(2.0 * na, reference_u + na)
+    if separation is not None:
+        band = max(band, separation + 2.0 * na)
     limit = wavelength_min / (2.0 * band)
     if oversample == "auto":
         s = max(1, math.ceil(pitch / limit - 1e-9))

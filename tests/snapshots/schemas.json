@@ -110,6 +110,82 @@
   "name": "chain",
   "version": 1
  },
+ "core:DiffractionOrders": {
+  "class": "gradix._core.carriers.DiffractionOrders",
+  "fields": [
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "O",
+     "2"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "frequencies",
+    "optional": false,
+    "quantity": "frequency",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "cycles/\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1",
+     "O",
+     "L"
+    ],
+    "dtype": "complex",
+    "event": [],
+    "kind": "tensor",
+    "name": "coefficients",
+    "optional": false,
+    "quantity": "dimensionless",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": [
+     "B|1"
+    ],
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "distance",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "carrier",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "choices": [
+     "camera",
+     "grating"
+    ],
+    "default": "camera",
+    "kind": "static",
+    "name": "focused",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "carrier.diffraction_orders",
+  "version": 1
+ },
  "core:EmitterDensity": {
   "class": "gradix._core.carriers.EmitterDensity",
   "fields": [
@@ -768,10 +844,18 @@
     "name": "references",
     "optional": false,
     "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "detection_optics",
+    "optional": false,
+    "required": false
    }
   ],
   "name": "microscope",
-  "version": 2
+  "version": 3
  },
  "core:ObjectSpectra": {
   "class": "gradix._core.carriers.ObjectSpectra",
@@ -2508,10 +2592,18 @@
     "name": "references",
     "optional": false,
     "required": false
+   },
+   {
+    "container": "mapping",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "detection_optics",
+    "optional": false,
+    "required": false
    }
   ],
   "name": "microscope",
-  "version": 2
+  "version": 3
  },
  "data_object:optics.objective": {
   "class": "gradix.optics.objective.Objective",
@@ -3506,6 +3598,118 @@
    }
   ],
   "name": "source.uniform",
+  "version": 1
+ },
+ "element:stage.grating": {
+  "class": "gradix.optics.grating.Grating",
+  "fields": [
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "period",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "image",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "distance",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": 0.0,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "rotation",
+    "optional": false,
+    "quantity": "angle",
+    "required": false,
+    "role": "image",
+    "shape_affecting": false,
+    "unit": "rad"
+   },
+   {
+    "choices": [
+     "hartmann",
+     "checkerboard",
+     "custom"
+    ],
+    "default": "hartmann",
+    "kind": "static",
+    "name": "kind",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": 3,
+    "kind": "static",
+    "name": "max_order",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": null,
+    "kind": "static",
+    "name": "orders",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [
+     -1
+    ],
+    "kind": "tensor",
+    "name": "coefficients",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "shared",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "choices": [
+     "camera",
+     "grating"
+    ],
+    "default": "camera",
+    "kind": "static",
+    "name": "focused",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "stage.grating",
   "version": 1
  },
  "element:transduce.linear": {

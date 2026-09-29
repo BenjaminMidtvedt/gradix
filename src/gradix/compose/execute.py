@@ -10,8 +10,9 @@ element accepts (an :class:`~gradix.EmitterSet` or an :class:`~gradix.EmitterDen
 excited when the Chain has light and an excitation element, rendered into an
 :class:`~gradix.Irradiance` and detected by the camera. The coherent path (M3a) runs the light
 source, lowers every scatterer population to its spectra (:class:`~gradix.ObjectSpectra`) and
-images them with the plane waves through a coherent imaging element; optical stages and
-references join it in later M3a phases.
+images them with the plane waves through a coherent imaging element, with image-side
+references and a detection grating's diffraction orders (ADR-45); the sampled optical stages
+join it in M3.
 
 A render has three steps, so a chunked Pipeline can run the deterministic ones per chunk and
 draw the noise once for the whole batch (identical results with batch or image keys):
@@ -27,6 +28,7 @@ import torch
 from torch import Tensor
 
 from gradix._core.carriers import (
+    DiffractionOrders,
     EmitterDensity,
     EmitterSet,
     Irradiance,
@@ -82,11 +84,14 @@ def check_supported(chain: Chain) -> None:
         On coherent slots, a missing imaging element or camera, or an imaging element that does
         not consume emitters.
     """
-    if chain.illumination_optics or chain.detection_optics:
-        msg = "optical stages are not available yet (later M3a phases)"
+    if chain.illumination_optics:
+        msg = "illumination stages are not available yet (later M3a phases)"
         raise PlanError(msg, fix="render the Chain without them for now")
     if chain.references and not coherent(chain):
         raise PlanError("references need a coherent Chain", fix="use gx.imaging.Coherent")
+    if chain.detection_optics and not coherent(chain):
+        msg = "detection stages need a coherent Chain (the sampled stages arrive in M3)"
+        raise PlanError(msg, fix="use gx.imaging.Coherent with a gx.optics.Grating")
     if coherent(chain):
         _check_coherent(chain)
         return
@@ -182,6 +187,18 @@ def _check_coherent(chain: Chain) -> None:
         if not isinstance(element, Element) or not _makes(element, PlaneWaves):
             msg = f"references[{name!r}] must be a reference element such as gx.light.ReferenceBeam"
             raise PlanError(msg, fix=f"references={{{name!r}: gx.light.ReferenceBeam(...)}}")
+    for name, element in chain.detection_optics.items():
+        if not isinstance(element, Element) or not _makes(element, DiffractionOrders):
+            msg = (
+                f"detection_optics[{name!r}]: coherent Chains take a detection grating "
+                "(gx.optics.Grating) until the sampled stages of M3"
+            )
+            raise PlanError(msg, fix=f"detection_optics={{{name!r}: gx.optics.Grating(...)}}")
+    if len(chain.detection_optics) > 1:
+        raise PlanError("one detection grating per Chain", fix="keep one gx.optics.Grating")
+    if chain.detection_optics and chain.references:
+        msg = "a detection grating and an image-side reference together are not modelled"
+        raise PlanError(msg, fix="drop the reference: the grating's orders interfere")
     if not isinstance(chain.camera, Camera):
         raise PlanError("the Chain has no camera", fix="give the imaging element a camera")
     if chain.environment is None:
@@ -312,7 +329,10 @@ def _coherent_statics(chain: Chain, imaging: Element) -> dict[str, Static]:
         statics[f"scatterers.{name}"] = element.eager_static(waves, chain.environment)
     contributions = _contributions(chain, waves, statics)
     references = _references(chain, waves, statics)
-    statics["imaging"] = imaging.eager_static(contributions, waves, chain.environment, references)
+    stages = _stages(chain, waves, statics)
+    statics["imaging"] = imaging.eager_static(
+        contributions, waves, chain.environment, references, stages
+    )
     return statics
 
 
@@ -337,6 +357,20 @@ def _references(
             kind = type(reference).__name__
             raise StructureError(f"references[{name!r}] returned {kind}, not PlaneWaves")
         out.append(reference)
+    return tuple(out)
+
+
+def _stages(
+    chain: Chain, waves: PlaneWaves, statics: Mapping[str, Static]
+) -> tuple[DiffractionOrders, ...]:
+    """Evaluate the Chain's detection stages at the light's wavelengths (a grating's orders)."""
+    out: list[DiffractionOrders] = []
+    for name, element in chain.detection_optics.items():
+        stage = element.forward(waves, static=statics.get(f"detection_optics.{name}", Static()))
+        if not isinstance(stage, DiffractionOrders):
+            kind = type(stage).__name__
+            raise StructureError(f"detection_optics[{name!r}] returned {kind}")
+        out.append(stage)
     return tuple(out)
 
 
@@ -393,8 +427,14 @@ def irradiance(chain: Chain, statics: Mapping[str, Static]) -> Irradiance:
         waves = _waves(chain, statics)
         contributions = _contributions(chain, waves, statics)
         references = _references(chain, waves, statics)
+        stages = _stages(chain, waves, statics)
         out = imaging.forward(
-            contributions, waves, chain.environment, references, static=statics["imaging"]
+            contributions,
+            waves,
+            chain.environment,
+            references,
+            stages,
+            static=statics["imaging"],
         )
         if isinstance(out, Irradiance):  # the frames the acquisition declares (a focus stack)
             out = out.replace(acq=chain.acq_index())
@@ -543,7 +583,9 @@ def fields(
         if spec.normalize == "background":
             background = backgrounds.get(spec.sampling)
             if background is None:
-                empty = image_field((), waves, chain.environment, static=static)
+                empty = image_field(
+                    contributions, waves, chain.environment, static=static, part="background"
+                )
                 background = backgrounds[spec.sampling] = pool(empty, spec.sampling)
             if bool((background.abs() == 0).any()):
                 msg = "no background reaches the camera (epi or darkfield illumination)"

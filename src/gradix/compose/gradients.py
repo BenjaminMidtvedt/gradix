@@ -80,6 +80,13 @@ def _route_quality(chain: Chain, path: str, output: str) -> str:
     elif head == "references" and imaging is not None:
         # an image-side reference interferes with the object field on the camera
         routes.append(_through(imaging.input_quality("references", output), sensor))
+    elif head == "detection_optics" and imaging is not None:
+        # a detection grating's orders: its fields → the orders → the coherent image
+        name, _, field = rest.partition(".")
+        element = chain.detection_optics.get(name)
+        if isinstance(element, Element) and field:
+            own = element.field_quality(field, output)
+            routes.append(_through(own, imaging.input_quality("stages", output), sensor))
     elif head == "environment" and imaging is not None:
         routes.append(_through(imaging.input_quality("environment", output), sensor))
         excite = chain.excite if isinstance(chain.excite, Element) else None

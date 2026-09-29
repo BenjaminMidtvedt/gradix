@@ -1,4 +1,4 @@
-"""Interferometric presets (§5.12): in-line and off-axis holography, and iSCAT; QWLSI follows."""
+"""Interferometric presets (§5.12): in-line and off-axis holography, iSCAT and QWLSI."""
 
 from __future__ import annotations
 
@@ -11,10 +11,11 @@ from gradix._core.errors import StructureError
 from gradix.containers.containers import Microscope
 from gradix.detect.camera import Camera
 from gradix.light.reference import ReferenceBeam
+from gradix.optics.grating import Grating
 from gradix.optics.objective import Objective
 from gradix.optics.pupil import Filter
 
-__all__ = ["ISCAT", "InlineHolography", "OffAxisHolography"]
+__all__ = ["ISCAT", "QWLSI", "InlineHolography", "OffAxisHolography"]
 
 
 def _check_plane_waves(light: Element, what: str) -> None:
@@ -221,3 +222,72 @@ def ISCAT(
         stop = Filter(radius=radius, transmission=attenuation, phase=filter_phase)
         objective = objective.replace(pupil=(*objective.pupil, stop))
     return Microscope(objective=objective, camera=camera, light=light, background=background)
+
+
+@register.preset("qwlsi")
+def QWLSI(
+    *,
+    light: Element,
+    objective: Objective,
+    camera: Camera,
+    distance: Tensor | float,
+    period: Tensor | float | None = None,
+    kind: str = "hartmann",
+    rotation: Tensor | float = 0.0,
+    background: Tensor | float | None = None,
+) -> Microscope:
+    """Build a quadriwave lateral shearing interferometer: a grating just before the camera.
+
+    Transmitted plane-wave light images the sample onto the camera through a 2-D grating a
+    distance d before it (``gx.optics.Grating``, ADR-45): the camera records the fringes of
+    four sheared copies of the image field, whose phases hold the wavefront's gradients over
+    the shear λd/Λ (§5.12). ``gx.recon.QWLSI.from_chain`` recovers the field.
+
+    Parameters
+    ----------
+    light : Element
+        Plane-wave light, such as ``gx.light.PlaneWave(0.532, irradiance=...)``.
+    objective : Objective
+        The objective.
+    camera : Camera
+        The camera, in focus.
+    distance : Tensor or float
+        Grating-to-camera distance d, µm.
+    period : Tensor or float, optional
+        Fringe period Λ on the camera, µm; by default four camera pixels.
+    kind : {"hartmann", "checkerboard"}, default "hartmann"
+        The grating's mask.
+    rotation : Tensor or float, default 0.0
+        Rotation of the grating's axes, rad.
+    background : Tensor or float, optional
+        Incoherent background photons per pixel per exposure.
+
+    Returns
+    -------
+    Microscope
+        The microscope, with the grating in ``detection_optics["grating"]``.
+
+    Examples
+    --------
+    >>> import gradix as gx
+    >>> scope = QWLSI(
+    ...     light=gx.light.PlaneWave(0.532, irradiance=1e4),
+    ...     objective=gx.Objective(NA=0.8, magnification=100),
+    ...     camera=gx.Camera(pixel_size=6.5, shape=(64, 64)),
+    ...     distance=500.0,
+    ... )
+    >>> float(scope.detection_optics["grating"].period)
+    26.0
+    """
+    _check_plane_waves(light, "QWLSI")
+    if period is None:
+        pixel = camera.pixel_size
+        period = 4.0 * (pixel if isinstance(pixel, (int, float)) else float(pixel))
+    grating = Grating(period=period, distance=distance, rotation=rotation, kind=kind)
+    return Microscope(
+        objective=objective,
+        camera=camera,
+        light=light,
+        background=background,
+        detection_optics={"grating": grating},
+    )
