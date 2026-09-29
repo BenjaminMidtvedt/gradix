@@ -25,7 +25,8 @@ import torch
 from torch import Tensor
 
 from gradix._core.carriers import EmitterDensity, EmitterSet, Irradiance, PlaneWaves
-from gradix._core.contract import Element, Static
+from gradix._core.contract import Description, Element, Static, report
+from gradix._core.envelope import envelope_of
 from gradix._core.errors import PlanError, StructureError
 from gradix.compose.chain import Chain
 from gradix.compose.outputs import Expected, Image, OutputSpec
@@ -35,7 +36,8 @@ from gradix.labels.positions import Label
 from gradix.lower.density import emitter_density
 from gradix.lower.emitters import emitter_set, population_counts
 from gradix.objects.acquisition import Acquisition, FocusStack
-from gradix.objects.objectset import Emitters
+from gradix.objects.labeling import Labeling
+from gradix.objects.objectset import Emitters, Solid
 from gradix.objects.volumes import Voxels
 from gradix.optics.objective import Objective
 from gradix.schema.base import iter_leaves
@@ -86,13 +88,17 @@ def check_supported(chain: Chain) -> None:
     imaging = type(chain.imaging).__name__
     if EmitterSet not in accepts and EmitterDensity not in accepts:
         raise PlanError(f"{imaging} does not render emitters", fix="use gx.imaging.Sprites")
-    want = Emitters if EmitterSet in accepts else Voxels
+    points = EmitterSet in accepts
     grids = set()
     for name, pop in chain.emitters.items():
-        if not isinstance(pop, want):
-            kind = type(pop).__name__
-            msg = f"emitters[{name!r}] is a {kind}; {imaging} renders gx.{want.__name__}"
-            fix = "points render with Sprites/PointPSF, densities with gx.imaging.Strata"
+        kind = type(pop).__name__
+        if isinstance(pop, Solid) and not isinstance(pop.labeling, Labeling):
+            msg = f"emitters[{name!r}] is a {kind} without a labeling: it emits nothing"
+            raise PlanError(msg, fix="pass labeling=gx.Labeling(...), or render it as a scatterer")
+        if not isinstance(pop, Emitters if points else (Voxels, Solid)):
+            wanted = "gx.Emitters" if points else "gx.Voxels densities and labelled solids"
+            msg = f"emitters[{name!r}] is a {kind}; {imaging} renders {wanted}"
+            fix = "points render with Sprites/PointPSF; densities and solids with gx.imaging.Strata"
             raise PlanError(msg, fix=fix)
         if isinstance(pop, Voxels):
             if pop.quantity != "density":
@@ -164,12 +170,16 @@ def acquired(chain: Chain) -> Chain:
     return chain.acquired()
 
 
-def _emission(chain: Chain) -> EmitterSet | EmitterDensity:
-    """Lower the emitting populations to what the imaging element accepts."""
+def _emission(
+    chain: Chain, statics: Mapping[str, Static] | None = None
+) -> EmitterSet | EmitterDensity:
+    """Lower the emitting populations to what the imaging element accepts (on its grid)."""
     imaging = chain.imaging
     if isinstance(imaging, Element) and EmitterSet not in imaging.caps.accepts:
-        volumes = {k: v for k, v in chain.emitters.items() if isinstance(v, Voxels)}
-        return emitter_density(volumes, acq=chain.acq_index())
+        pops = {k: v for k, v in chain.emitters.items() if isinstance(v, (Voxels, Solid))}
+        static = (statics or {}).get("imaging")
+        request = imaging.density_request(static) if static is not None else None
+        return emitter_density(pops, request=request, acq=chain.acq_index())
     return _emitters(chain)
 
 
@@ -204,12 +214,24 @@ def eager_statics(chain: Chain) -> dict[str, Static]:
     imaging = chain.imaging
     if not isinstance(imaging, Element):  # pragma: no cover - checked above
         raise PlanError("no imaging element")
+    if any(isinstance(p, Solid) for p in chain.emitters.values()):
+        # solids are rasterised onto the grid the element chooses (ADR-41): configure first,
+        # on the populations' own envelope (no headroom), as a Pipeline does on its envelope
+        envelope = envelope_of(chain, headroom=1.0)
+        desc = Description(
+            path="imaging",
+            populations=tuple(sorted(chain.emitters)),
+            parts={"objective": "objective", "camera": "camera", "environment": "environment"},
+            nodes=chain.parts(),
+        )
+        report(imaging.validity(desc, envelope), "warn")
+        return {"imaging": imaging.configure(desc, envelope)}
     return {"imaging": imaging.eager_static(_emission(chain), chain.environment)}
 
 
 def _excited(chain: Chain, statics: Mapping[str, Static]) -> EmitterSet | EmitterDensity:
     """Return the emission the imaging element sees: excited by the light when there is some."""
-    emitters = _emission(chain)
+    emitters = _emission(chain, statics)
     if chain.excite is None or not isinstance(chain.light, Element):
         return emitters
     light = chain.light

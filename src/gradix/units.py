@@ -131,6 +131,7 @@ for _q in (
     Quantity("attenuation", "1/µm", -1, "attenuation and scattering coefficients"),
     Quantity("irradiance", "photons/µm²", -2, "photons per µm² per exposure"),
     Quantity("density", "photons/µm³", -3, "photon densities per µm³ per exposure"),
+    Quantity("surface_density", "photons/µm²", -2, "photons per µm² of surface per exposure"),
     Quantity("angle", "rad", 0, "angles"),
     Quantity("index", "1", 0, "refractive indices, possibly complex"),
     Quantity("photons", "photons", 0, "photon counts per exposure"),

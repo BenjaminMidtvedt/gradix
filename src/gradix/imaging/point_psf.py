@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from collections.abc import Mapping
 from typing import ClassVar
 
 import torch
@@ -135,6 +136,12 @@ class PointPSF(Element[Irradiance]):
     """
 
     slot: ClassVar[Slot] = Slot.EMIT
+    fidelity_knobs: ClassVar[Mapping[str, str | tuple[str, Mapping[str, str]]]] = {
+        "psf": "psf",
+        "oversample": "oversample",
+        "roi": "roi",
+        "emitter_path": ("method", {"sparse": "roi", "global": "global"}),
+    }
     caps: ClassVar[Capabilities] = Capabilities(
         accepts=frozenset({EmitterSet}),
         produces=Irradiance,

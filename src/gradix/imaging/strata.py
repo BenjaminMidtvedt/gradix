@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from collections.abc import Mapping
 from typing import ClassVar
 
 import torch
@@ -20,7 +21,15 @@ from torch import Tensor
 
 from gradix import register
 from gradix._core.carriers import EmitterDensity, Irradiance
-from gradix._core.contract import Capabilities, Description, Element, Slot, Static, Violation
+from gradix._core.contract import (
+    Capabilities,
+    DensityRequest,
+    Description,
+    Element,
+    Slot,
+    Static,
+    Violation,
+)
 from gradix._core.envelope import Envelope
 from gradix._core.errors import StructureError
 from gradix._core.grid import Grid2D, PupilGrid, VolumeGrid, nice_size
@@ -30,6 +39,7 @@ from gradix.detect.camera import Camera
 from gradix.imaging._shared import MARGIN, fused_modifiers, material_range, ratio_per_image
 from gradix.imaging._shared import value as value_of
 from gradix.objects.environment import Medium
+from gradix.objects.objectset import Solid
 from gradix.objects.turbid import TurbidSlab
 from gradix.objects.volumes import Voxels
 from gradix.ops import pupil as ops
@@ -55,11 +65,23 @@ class StrataStatic(Static):
         Fine samples per camera pixel, s; densities must be sampled at the pitch ``p/s``.
     pupil : PupilGrid, optional
         The pupil grid in NA units.
+    volume : VolumeGrid, optional
+        The grid labelled solids are rasterised onto (ADR-41); None without solids.
+    reach : tuple of (str, float), default ()
+        Each solid population's largest bounding radius, µm.
+    blur : float, default 0.0
+        The raster prefilter σ_r, µm.
+    deterministic : bool, default False
+        Rasterise with a fixed summation order.
     """
 
     grid: Grid2D | None = None
     oversample: int = 1
     pupil: PupilGrid | None = None
+    volume: VolumeGrid | None = None
+    reach: tuple[tuple[str, float], ...] = ()
+    blur: float = 0.0
+    deterministic: bool = False
 
 
 def _offset_span(grid: VolumeGrid, frame: tuple[tuple[float, float], ...]) -> float:
@@ -87,6 +109,28 @@ def _alignment(offset: float, what: str) -> int:
         fix = "place voxel centres on the fine grid: origin = (i + 0.5)·p + j·p/s"
         raise StructureError(msg, fix=fix)
     return int(index)
+
+
+def _axial_limit(wavelength: float, na: float, n: float) -> float:
+    """Return the plane spacing that resolves the axial band: λ/(2(n − √(n² − NA²))), µm."""
+    na_s = min(na, n)
+    return wavelength / (2.0 * (n - math.sqrt(max(n * n - na_s * na_s, 0.0))))
+
+
+def _solid_reach(envelope: Envelope, name: str, node: Solid) -> float:
+    """Return a solid population's largest bounding radius from its envelope, µm."""
+    spec = type(node).schema()
+    args: dict[str, Tensor] = {}
+    for field in node.shape_fields:
+        paths = [f"{name}.{field}.{c}" for c in spec[field].components or ()] or [f"{name}.{field}"]
+        spans = [envelope.range(p) for p in paths]
+        if any(span is None for span in spans):  # no entry: the values themselves
+            value = canonical(getattr(node, field), spec[field], dtype=torch.float64).detach()
+            args[field] = value.reshape(-1, *value.shape[3:]).amax(dim=0)
+        else:
+            highs = [span[1] for span in spans if span is not None]
+            args[field] = torch.tensor(highs if spec[field].components else highs[0])
+    return float(node.reach(args).max())
 
 
 def _window(data: Tensor, size: tuple[int, int], start: tuple[int, int]) -> Tensor:
@@ -138,6 +182,11 @@ class Strata(Element[Irradiance]):
         visibly. With ``pupil_samples="auto"`` the periodic kernels get a smaller pupil (they
         span one period, not every offset), which moves the PSF by up to about 2e-3 (the
         pupil's O(du) convergence).
+    raster_sigma : float, default 0.3
+        Width of the raster prefilter of labelled solids, in lateral voxel spacings (σ_r = c·h).
+    plane_spacing : float or "auto", default "auto"
+        Plane spacing of rasterised solids, µm; ``"auto"`` resolves the axial band,
+        λ_min/(2(n − √(n² − NA²))).
 
     Examples
     --------
@@ -148,7 +197,12 @@ class Strata(Element[Irradiance]):
     """
 
     slot: ClassVar[Slot] = Slot.EMIT
-    schema_version: ClassVar[int] = 3
+    fidelity_knobs: ClassVar[Mapping[str, str | tuple[str, Mapping[str, str]]]] = {
+        "oversample": "oversample",
+        "raster_sigma": "raster_sigma",
+        "dense_boundary": ("boundary", {"linear": "linear", "periodic": "periodic"}),
+    }
+    schema_version: ClassVar[int] = 4
     caps: ClassVar[Capabilities] = Capabilities(
         accepts=frozenset({EmitterDensity}),
         produces=Irradiance,
@@ -171,6 +225,8 @@ class Strata(Element[Irradiance]):
         choices=("linear", "periodic"),
         doc="exact linear convolution or a circular one over the frame and margin",
     )
+    raster_sigma: float = knob(default=0.3, doc="raster prefilter width, in lateral voxel spacings")
+    plane_spacing: float | str = knob(default="auto", doc="plane spacing of rasterised solids, µm")
 
     def _bands(self, desc: Description, envelope: Envelope) -> list[tuple[float, float]]:
         out = []
@@ -179,6 +235,32 @@ class Strata(Element[Irradiance]):
             if band is not None:
                 out.append(band)
         return out
+
+    def input_quality(self, name: str, output: str = "expected") -> str:
+        """Return the gradient quality with respect to a population field.
+
+        Densities' values and every geometry and label field of a solid (positions, rotations,
+        sizes, label densities and photons) reach the image through the differentiable raster
+        lowering; materials, identities and parent links emit nothing.
+
+        Parameters
+        ----------
+        name : str
+            Field path within the population, or ``"environment"``.
+        output : {"expected", "image"}, default "expected"
+            The output kind the element's result feeds.
+
+        Returns
+        -------
+        str
+            ``"zero"`` for materials, identities and parent links; ``"exact"`` otherwise.
+        """
+        if name.split(".")[0] in ("material", "id", "parent"):
+            return "zero"
+        return "exact"
+
+    def _solids(self, desc: Description) -> dict[str, Solid]:
+        return {n: v for n in desc.populations if isinstance(v := desc.nodes.get(n), Solid)}
 
     def _grids(self, desc: Description) -> list[Voxels | EmitterDensity]:
         found: list[Voxels | EmitterDensity] = []
@@ -250,14 +332,23 @@ class Strata(Element[Irradiance]):
             )
         u_max = na_eff * 1.03125
         height, width = self.camera.shape
+        solids = self._solids(desc)
+        volume, reach, blur = None, (), 0.0
+        if solids:
+            blur = self.raster_sigma * pitch / s
+            reach = tuple((k, _solid_reach(envelope, k, v)) for k, v in sorted(solids.items()))
+            if grids:  # volumes fix the grid; solids are rasterised onto it
+                volume = grids[0].grid() if isinstance(grids[0], Voxels) else grids[0].grid
+            else:
+                volume = self._volume(envelope, env, medium, reach, blur, pitch, s, band, na_eff)
         # the pupil's period λ/du must exceed every voxel-to-sample offset plus a PSF half-width
         frame = ((-MARGIN * pitch, (width + MARGIN) * pitch),
                  (-MARGIN * pitch, (height + MARGIN) * pitch))  # fmt: skip
         extent = max(frame[0][1] - frame[0][0], frame[1][1] - frame[1][0])
         focus = envelope.range(f"{obj}.focus") or (0.0, 0.0)
         dz = 0.0
-        for g in grids:
-            grid = g.grid() if isinstance(g, Voxels) else g.grid
+        planned = [g.grid() if isinstance(g, Voxels) else g.grid for g in grids]
+        for grid in [*planned, *([volume] if volume is not None else [])]:
             extent = max(extent, _offset_span(grid, frame))
             z_lo, z_hi = grid.z0, grid.z0 + (grid.nz - 1) * grid.dz
             dz = max(dz, abs(z_hi - focus[0]), abs(focus[1] - z_lo))
@@ -275,11 +366,82 @@ class Strata(Element[Irradiance]):
             d_spacing,
             Decision("pupil.samples", samples, rule, {"u_max": u_max, "extent": extent}),
         )
+        if volume is not None:
+            decisions = (
+                *decisions,
+                Decision(
+                    "raster.planes",
+                    volume.nz,
+                    "solids' z range ± reach, spacing "
+                    + ("λ_min/(2(n − √(n² − NA²)))" if self.plane_spacing == "auto" else "pinned"),
+                    {"dz": volume.dz, "blur": blur},
+                ),
+            )
         return StrataStatic(
             decisions=decisions,
             grid=Grid2D((height, width), pitch, (0.0, 0.0)),
             oversample=s,
             pupil=PupilGrid((samples, samples), u_max),
+            volume=volume,
+            reach=reach,
+            blur=blur,
+            deterministic=desc.deterministic,
+        )
+
+    def _volume(
+        self,
+        envelope: Envelope,
+        env: str,
+        medium: object,
+        reach: tuple[tuple[str, float], ...],
+        blur: float,
+        pitch: float,
+        s: int,
+        band: tuple[float, float],
+        na: float,
+    ) -> VolumeGrid:
+        """Return the grid solids are rasterised onto: the fine frame, planes over their z range."""
+        height, width = self.camera.shape
+        dx = pitch / s
+        # laterally the fine grid over the frame and its margin, voxel centres on fine samples
+        corner = (0.5 - MARGIN) * pitch - 0.5 * dx
+        xy = Grid2D(((height + 2 * MARGIN) * s, (width + 2 * MARGIN) * s), dx, (corner, corner))
+        z_lo, z_hi = math.inf, -math.inf
+        for name, r in reach:
+            span = envelope.range(f"{name}.position.z") or (0.0, 0.0)
+            z_lo, z_hi = min(z_lo, span[0] - r - 3.0 * blur), max(z_hi, span[1] + r + 3.0 * blur)
+        if getattr(medium, "layered", False):
+            z_hi = min(z_hi, 0.0)  # the sample lies below the coverslip
+            z_lo = min(z_lo, z_hi)
+        n = envelope.range(f"{env}.n") or envelope.range(f"{env}.sample.n") or (1.33, 1.33)
+        if self.plane_spacing == "auto":
+            dz = _axial_limit(band[0], na, n[0])
+        else:
+            dz = float(self.plane_spacing)
+        nz = max(1, math.ceil((z_hi - z_lo) / dz - 1e-9) + 1)
+        z0 = 0.5 * (z_lo + z_hi) - 0.5 * (nz - 1) * dz
+        return VolumeGrid(xy=xy, z0=z0, dz=dz, nz=nz)
+
+    def density_request(self, static: Static) -> DensityRequest | None:
+        """Return the grid labelled solids are rasterised onto (ADR-41).
+
+        Parameters
+        ----------
+        static : Static
+            A :class:`StrataStatic`.
+
+        Returns
+        -------
+        DensityRequest or None
+            The volume grid, raster blur and reaches; None when no solids were planned for.
+        """
+        if not isinstance(static, StrataStatic) or static.volume is None:
+            return None
+        return DensityRequest(
+            grid=static.volume,
+            blur=static.blur,
+            reach=dict(static.reach),
+            deterministic=static.deterministic,
         )
 
     def validity(self, desc: Description, envelope: Envelope) -> list[Violation]:
@@ -328,6 +490,19 @@ class Strata(Element[Irradiance]):
                     fix="declare environment=gx.env.LayeredMedium(...)",
                 )
             )
+        if self._solids(desc) and self.plane_spacing != "auto" and na is not None:
+            limit = _axial_limit(wl, na, n[0])
+            if float(self.plane_spacing) > limit:
+                found.append(
+                    Violation(
+                        "warn",
+                        "the solids' planes are further apart than the axial resolution",
+                        value=float(self.plane_spacing),
+                        limit=limit,
+                        element=desc.path or "strata",
+                        fix='plane_spacing="auto"',
+                    )
+                )
         for g in self._grids(desc):
             grid = g.grid() if isinstance(g, Voxels) else g.grid
             top = grid.z0 + (grid.nz - 1) * grid.dz
@@ -420,8 +595,10 @@ class Strata(Element[Irradiance]):
         planes, area = 0, 0
         s = static.oversample
         cam = [(n + 2 * MARGIN) * s for n in static.grid.shape]
-        for g in self._grids(desc):
-            grid = g.grid() if isinstance(g, Voxels) else g.grid
+        grids = [g.grid() if isinstance(g, Voxels) else g.grid for g in self._grids(desc)]
+        if static.volume is not None and not grids:
+            grids = [static.volume]
+        for grid in grids:
             planes += grid.nz
             if self.boundary == "periodic":
                 fy, fx = nice_size(cam[0]), nice_size(cam[1])

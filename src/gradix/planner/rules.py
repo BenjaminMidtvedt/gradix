@@ -21,21 +21,21 @@ from gradix._core.contract import Element
 from gradix._core.envelope import Envelope
 from gradix._core.errors import PlanError, RegistryError
 from gradix._core.registry import elements
-from gradix.objects.objectset import ObjectSet
+from gradix.objects.objectset import ObjectSet, Solid
 from gradix.objects.volumes import Voxels
-from gradix.planner.fidelity import PRESETS, Fidelity
+from gradix.planner.fidelity import Fidelity
 
 __all__ = [
     "BUILDERS",
     "ELEMENT_KNOBS",
     "FAMILIES",
     "KNOBS",
-    "KNOB_FIELDS",
     "RULES",
     "Route",
     "RouteContext",
     "build",
     "route",
+    "routing",
 ]
 
 
@@ -77,6 +77,7 @@ RULES: dict[tuple[str, str, str, str], Rule] = {
     ("compact", "coherent", "compact", "projection"): "interact.projection",
     ("volume", "coherent", "volumes", "projection"): "interact.projection",
     ("volume", "coherent", "volumes", "multislice"): "interact.multislice",
+    ("labeled", "emission", "emitter_path", "auto"): "emit.strata_otf",
     ("labeled", "emission", "emitter_path", "strata"): "emit.strata_otf",
     ("voxels", "emission", "emitter_path", "auto"): "emit.strata_otf",
     ("voxels", "emission", "emitter_path", "strata"): "emit.strata_otf",
@@ -89,18 +90,12 @@ KNOBS: dict[tuple[str, str], str] = {
     ("compact", "coherent"): "compact",
     ("volume", "coherent"): "volumes",
     ("voxels", "emission"): "emitter_path",
+    ("labeled", "emission"): "emitter_path",
 }
 """The fidelity knob that routes each ``(kind, contrast)``."""
 
 ELEMENT_KNOBS: tuple[str, ...] = ("source", "dz", "pad", "roi")
 """Fidelity knobs without preset values that are written into elements declaring them."""
-
-KNOB_FIELDS: dict[str, tuple[str, dict[str, str]]] = {
-    "emitter_path": ("method", {"sparse": "roi", "global": "global"}),
-    "dense_boundary": ("boundary", {"linear": "linear", "periodic": "periodic"}),
-}
-"""Fidelity knobs written into an element field of another name: knob → (field, value map).
-Values outside the map (``"auto"``) leave the element's default."""
 
 FAMILIES: dict[str, str] = {"emission": "emit", "coherent": "interact"}
 """Registry family of the elements that render each contrast; bare knob values resolve in it."""
@@ -108,6 +103,7 @@ FAMILIES: dict[str, str] = {"emission": "emit", "coherent": "interact"}
 _ACCEPTS: dict[tuple[str, str] | str, type] = {
     "emission": EmitterSet,
     ("voxels", "emission"): EmitterDensity,
+    ("labeled", "emission"): EmitterDensity,
 }
 """The carrier an element must accept to render a population: by ``(kind, contrast)``, else by
 contrast (point emitters by default)."""
@@ -165,18 +161,38 @@ def _resolve(value: str, family: str | None) -> str | None:
     return None
 
 
+def routing(pop: ObjectSet | Voxels) -> tuple[str, str]:
+    """Return the ``(kind, contrast)`` a population routes on.
+
+    Parameters
+    ----------
+    pop : ObjectSet or Voxels
+        The population.
+
+    Returns
+    -------
+    tuple of str
+        ``("labeled", "emission")`` for a solid with a labeling (it renders as a fluorescent
+        density), else the population's own kind and contrast.
+    """
+    if isinstance(pop, Solid) and pop.labeling is not None:
+        return "labeled", "emission"
+    return pop.kind, pop.contrast
+
+
 def _check_element(name: str, choice: str, pop: ObjectSet | Voxels) -> None:
     try:
         cls = elements.get(choice)
     except RegistryError:
         msg = f"population {name!r} routes to {choice!r}, which is not available in this version"
-        if pop.contrast == "emission":
+        if routing(pop)[1] == "emission":
             pin = {name: "emit.gaussian"}
             fix = f"use fidelity='draft' (Gaussian sprites) or pin methods={pin!r}"
         else:
             fix = "coherent paths arrive with M3"
         raise PlanError(msg, fix=fix) from None
-    carrier = _ACCEPTS.get((pop.kind, pop.contrast), _ACCEPTS.get(pop.contrast))
+    kind, contrast = routing(pop)
+    carrier = _ACCEPTS.get((kind, contrast), _ACCEPTS.get(contrast))
     if not isinstance(cls, type) or not issubclass(cls, Element):
         raise PlanError(f"{choice!r} is not an element class (population {name!r})")
     if carrier is not None and carrier not in cls.caps.accepts:
@@ -226,18 +242,19 @@ def route(
     env = envelope if envelope is not None else Envelope()
     out: dict[str, Route] = {}
     for name, pop in sorted(populations.items()):
-        family = FAMILIES.get(pop.contrast)
+        kind, contrast = routing(pop)
+        family = FAMILIES.get(contrast)
         if name in methods:
             pinned = methods[name]
             choice = _resolve(pinned, family) or pinned
             reason = "pinned by methods="
         else:
-            knob = KNOBS.get((pop.kind, pop.contrast))
+            knob = KNOBS.get((kind, contrast))
             if knob is None:
-                msg = f"no rule renders population {name!r} ({pop.kind}, {pop.contrast})"
+                msg = f"no rule renders population {name!r} ({kind}, {contrast})"
                 raise PlanError(msg, fix="pin an element with methods={...}")
             value = str(fidelity.knob(knob, population=name))
-            rule = RULES.get((pop.kind, pop.contrast, knob, value))
+            rule = RULES.get((kind, contrast, knob, value))
             if rule is not None:
                 ctx = RouteContext(name, pop, fidelity, env, int((counts or {}).get(name, 1)))
                 choice = str(rule(ctx)) if callable(rule) else str(rule)
@@ -291,13 +308,17 @@ def build(
         raise PlanError(f"the planner cannot build {family!r} elements yet ({choice!r})")
     schema = cls.schema()
     knobs = {}
-    for knob in (*PRESETS["standard"], *ELEMENT_KNOBS):
-        if knob in schema:
-            value = fidelity.knob(knob, population=population)
-            if value is not None and value != "auto":
-                knobs[knob] = value
-    for knob, (name, values) in KNOB_FIELDS.items():
+    for knob, target in cls.fidelity_knobs.items():  # only the knobs the element declares
         value = fidelity.knob(knob, population=population)
-        if name in schema and isinstance(value, str) and value in values:
-            knobs[name] = values[value]
+        name, values = (target, None) if isinstance(target, str) else target
+        if name not in schema:
+            msg = (
+                f"{cls.__name__} declares the fidelity knob {knob!r} for a field {name!r} it lacks"
+            )
+            raise PlanError(msg, fix="fix the element's fidelity_knobs")
+        if values is not None:
+            if isinstance(value, str) and value in values:
+                knobs[name] = values[value]
+        elif value is not None and value != "auto":
+            knobs[name] = value
     return builder(cls, parts, knobs)

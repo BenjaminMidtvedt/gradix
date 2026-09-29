@@ -23,6 +23,7 @@ import torch
 from torch import Tensor
 
 from gradix._core.errors import StructureError
+from gradix._core.names import check_name
 from gradix.schema.fields import FieldSpec, specs
 from gradix.schema.layout import axis_sizes, check_dims, leading_axes, merge_sizes
 
@@ -110,9 +111,7 @@ def _check_child_field(owner: str, name: str, spec: FieldSpec, value: object) ->
             raise StructureError(msg)
         out: dict[str, Node] = {}
         for key, item in value.items():
-            if not isinstance(key, str) or not key or "." in key:
-                msg = f"{where}: key {key!r} must be a non-empty string without dots"
-                raise StructureError(msg)
+            check_name(key, what=f"{where}: key")  # keys become path segments (ADR-42)
             if not isinstance(item, Node):
                 kind = type(item).__name__
                 msg = f"{where}[{key!r}]: expected a data object or element, got {kind}"

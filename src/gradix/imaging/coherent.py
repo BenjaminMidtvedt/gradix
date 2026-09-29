@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from collections.abc import Mapping
 from typing import ClassVar
 
 import torch
@@ -96,6 +97,9 @@ class Coherent(Element[Irradiance]):
     """
 
     slot: ClassVar[Slot] = Slot.OBJECTIVE
+    fidelity_knobs: ClassVar[Mapping[str, str | tuple[str, Mapping[str, str]]]] = {
+        "oversample": "oversample"
+    }
     caps: ClassVar[Capabilities] = Capabilities(
         accepts=frozenset({ObjectSpectra, PlaneWaves}),
         produces=Irradiance,

@@ -23,6 +23,7 @@ from typing import Any, ClassVar, Generic, Literal, TypeAlias, TypeVar
 
 from gradix._core.envelope import Envelope, envelope_of
 from gradix._core.errors import GradixWarning, ValidityError
+from gradix._core.grid import VolumeGrid
 from gradix._core.rules import Decision
 from gradix.schema.base import Node
 
@@ -30,6 +31,7 @@ __all__ = [
     "GRAD_QUALITIES",
     "Capabilities",
     "Cost",
+    "DensityRequest",
     "Description",
     "Edge",
     "Element",
@@ -40,6 +42,28 @@ __all__ = [
     "report",
     "worst_quality",
 ]
+
+
+@dataclasses.dataclass(frozen=True)
+class DensityRequest:
+    """The grid an element wants emitter densities on (ADR-41); lowerings rasterise onto it.
+
+    Parameters
+    ----------
+    grid : VolumeGrid
+        The grid: planes and lateral samples in object space.
+    blur : float
+        Width of the raster prefilter σ_r, µm.
+    reach : Mapping[str, float], optional
+        Each solid population's largest bounding radius, µm (it sizes the raster patches).
+    deterministic : bool, default False
+        Rasterise with a fixed summation order.
+    """
+
+    grid: VolumeGrid
+    blur: float
+    reach: Mapping[str, float] = dataclasses.field(default_factory=dict)
+    deterministic: bool = False
 
 
 class Slot(str, enum.Enum):
@@ -466,6 +490,10 @@ class Element(Node, Generic[Out]):
     """The slot the element fills."""
     caps: ClassVar[Capabilities] = Capabilities()
     """The element's capabilities."""
+    fidelity_knobs: ClassVar[Mapping[str, str | tuple[str, Mapping[str, str]]]] = {}
+    """The fidelity knobs a planner writes into the element (ADR-42): knob → field name, or
+    knob → (field name, value map), where values outside the map (``"auto"``) keep the field's
+    default. Knobs not listed never reach the element, whatever its field names."""
 
     def field_quality(self, path: str, output: str = "expected") -> str:
         """Return the gradient quality of an output with respect to one of the element's fields.
@@ -569,6 +597,21 @@ class Element(Node, Generic[Out]):
         -------
         int or None
             Bytes per image, or None when the element's intermediates are small.
+        """
+        return None
+
+    def density_request(self, static: Static) -> DensityRequest | None:
+        """Return the grid this element wants emitter densities on, if it consumes densities.
+
+        Parameters
+        ----------
+        static : Static
+            The configuration.
+
+        Returns
+        -------
+        DensityRequest or None
+            None by default: the element takes densities on the grid they come with.
         """
         return None
 

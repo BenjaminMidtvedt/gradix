@@ -2250,6 +2250,88 @@
   "name": "env.turbid_slab",
   "version": 1
  },
+ "data_object:labeling": {
+  "class": "gradix.objects.labeling.Labeling",
+  "fields": [
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "emission",
+    "optional": false,
+    "required": true
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "density",
+    "optional": true,
+    "quantity": "density",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b3"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "surface_density",
+    "optional": true,
+    "quantity": "surface_density",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "photons/\u00b5m\u00b2"
+   },
+   {
+    "components": null,
+    "constraint": "nonnegative",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "photons",
+    "optional": true,
+    "quantity": "photons",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "photons"
+   },
+   {
+    "choices": [
+     "volume",
+     "surface"
+    ],
+    "default": "volume",
+    "kind": "static",
+    "name": "where",
+    "optional": false,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": "<factory>",
+    "kind": "child",
+    "name": "dipole",
+    "optional": false,
+    "required": false
+   }
+  ],
+  "name": "labeling",
+  "version": 1
+ },
  "data_object:light.polarization": {
   "class": "gradix.light.polarization.Polarization",
   "fields": [
@@ -2868,10 +2950,26 @@
     "name": "boundary",
     "optional": false,
     "required": false
+   },
+   {
+    "choices": null,
+    "default": 0.3,
+    "kind": "static",
+    "name": "raster_sigma",
+    "optional": false,
+    "required": false
+   },
+   {
+    "choices": null,
+    "default": "auto",
+    "kind": "static",
+    "name": "plane_spacing",
+    "optional": false,
+    "required": false
    }
   ],
   "name": "emit.strata_otf",
-  "version": 3
+  "version": 4
  },
  "element:interact.dipole": {
   "class": "gradix.interact.dipole.Dipole",
@@ -3618,6 +3716,558 @@
   "name": "sensor.scmos",
   "version": 2
  },
+ "object_set:boxes": {
+  "class": "gradix.objects.shapes.Boxes",
+  "fields": [
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "position",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     4
+    ],
+    "kind": "tensor",
+    "name": "rotation",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "unit_interval",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "presence",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "material",
+    "optional": true,
+    "quantity": "index",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "labeling",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "parent",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "integer",
+    "event": [],
+    "kind": "tensor",
+    "name": "id",
+    "optional": true,
+    "quantity": "index_map",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "int64"
+   },
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "size",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "boxes",
+  "version": 1
+ },
+ "object_set:capsules": {
+  "class": "gradix.objects.shapes.Capsules",
+  "fields": [
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "position",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     4
+    ],
+    "kind": "tensor",
+    "name": "rotation",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "unit_interval",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "presence",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "material",
+    "optional": true,
+    "quantity": "index",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "labeling",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "parent",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "integer",
+    "event": [],
+    "kind": "tensor",
+    "name": "id",
+    "optional": true,
+    "quantity": "index_map",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "int64"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "length",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "radius",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "capsules",
+  "version": 1
+ },
+ "object_set:cylinders": {
+  "class": "gradix.objects.shapes.Cylinders",
+  "fields": [
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "position",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     4
+    ],
+    "kind": "tensor",
+    "name": "rotation",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "unit_interval",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "presence",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "material",
+    "optional": true,
+    "quantity": "index",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "labeling",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "parent",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "integer",
+    "event": [],
+    "kind": "tensor",
+    "name": "id",
+    "optional": true,
+    "quantity": "index_map",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "int64"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "length",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "radius",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "cylinders",
+  "version": 1
+ },
+ "object_set:ellipsoids": {
+  "class": "gradix.objects.shapes.Ellipsoids",
+  "fields": [
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "position",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     4
+    ],
+    "kind": "tensor",
+    "name": "rotation",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "unit_interval",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "presence",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "material",
+    "optional": true,
+    "quantity": "index",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "labeling",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "parent",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "integer",
+    "event": [],
+    "kind": "tensor",
+    "name": "id",
+    "optional": true,
+    "quantity": "index_map",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "int64"
+   },
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "semi_axes",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "ellipsoids",
+  "version": 1
+ },
  "object_set:emitters": {
   "class": "gradix.objects.objectset.Emitters",
   "fields": [
@@ -3759,6 +4409,139 @@
    }
   ],
   "name": "emitters",
+  "version": 1
+ },
+ "object_set:gaussians": {
+  "class": "gradix.objects.shapes.Gaussians",
+  "fields": [
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "position",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     4
+    ],
+    "kind": "tensor",
+    "name": "rotation",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": "unit_interval",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [],
+    "kind": "tensor",
+    "name": "presence",
+    "optional": true,
+    "quantity": "dimensionless",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "number",
+    "event": [],
+    "kind": "tensor",
+    "name": "material",
+    "optional": true,
+    "quantity": "index",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "1"
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "labeling",
+    "optional": true,
+    "required": false
+   },
+   {
+    "container": "node",
+    "default": null,
+    "kind": "child",
+    "name": "parent",
+    "optional": true,
+    "required": false
+   },
+   {
+    "components": null,
+    "constraint": null,
+    "default": null,
+    "dims": null,
+    "dtype": "integer",
+    "event": [],
+    "kind": "tensor",
+    "name": "id",
+    "optional": true,
+    "quantity": "index_map",
+    "required": false,
+    "role": "object",
+    "shape_affecting": false,
+    "unit": "int64"
+   },
+   {
+    "components": [
+     "x",
+     "y",
+     "z"
+    ],
+    "constraint": "positive",
+    "default": null,
+    "dims": null,
+    "dtype": "real",
+    "event": [
+     3
+    ],
+    "kind": "tensor",
+    "name": "sigma",
+    "optional": false,
+    "quantity": "length",
+    "required": true,
+    "role": "object",
+    "shape_affecting": true,
+    "unit": "\u00b5m"
+   }
+  ],
+  "name": "gaussians",
   "version": 1
  },
  "object_set:spheres": {

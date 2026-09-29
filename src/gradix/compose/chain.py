@@ -26,6 +26,7 @@ from torch import Tensor
 from gradix._core.axes import AcqIndex
 from gradix._core.contract import Element
 from gradix._core.errors import BindingError, StructureError
+from gradix._core.names import PATH_NAMES, check_name
 from gradix.compose.outputs import Output
 from gradix.detect.camera import Camera, check_pixel_map
 from gradix.objects.acquisition import Acquisition, Bound
@@ -37,17 +38,8 @@ from gradix.schema.fields import child, field
 
 __all__ = ["PARTS", "Chain"]
 
-PARTS: tuple[str, ...] = (
-    "light",
-    "objective",
-    "camera",
-    "environment",
-    "acquisition",
-    "background",
-    "imaging",
-    "excite",
-)
-"""Reserved part names; populations and stages may not use them."""
+PARTS: tuple[str, ...] = tuple(sorted(PATH_NAMES))
+"""Reserved names: a Chain's parts and groups, which start logical paths themselves (ADR-42)."""
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True, eq=False)
@@ -178,9 +170,7 @@ class Chain(Node):
         )
         for group, mapping in groups:
             for name in mapping:
-                if name in PARTS:
-                    msg = f"{group}[{name!r}]: {name!r} is a reserved part name"
-                    raise StructureError(msg, fix="rename the population or stage")
+                check_name(name, what=f"{group}[{name!r}]:", reserved=PATH_NAMES)
                 if name in names:
                     msg = f"{name!r} names both {names[name]}[{name!r}] and {group}[{name!r}]"
                     raise StructureError(msg, fix="give every population and stage its own name")

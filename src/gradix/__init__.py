@@ -97,7 +97,20 @@ from gradix.compose import Chain, Output, Pipeline, SamplingPlan
 from gradix.containers import Microscope, Sample
 from gradix.detect import Camera
 from gradix.light import Polarization
-from gradix.objects import Emitters, ObjectSet, Spectrum, Spheres, Voxels
+from gradix.objects import (
+    Boxes,
+    Capsules,
+    Cylinders,
+    Ellipsoids,
+    Emitters,
+    Gaussians,
+    Labeling,
+    ObjectSet,
+    Solid,
+    Spectrum,
+    Spheres,
+    Voxels,
+)
 from gradix.objects.materials import Material
 from gradix.optics import Objective, PupilModifier
 from gradix.planner import Fidelity
@@ -111,15 +124,19 @@ from gradix.schema.units import from_si, to_si
 __all__ = [
     "AcqIndex",
     "BindingError",
+    "Boxes",
     "Camera",
     "Capabilities",
     "CapacityError",
+    "Capsules",
     "Chain",
     "Cost",
+    "Cylinders",
     "DataObject",
     "Description",
     "Edge",
     "Element",
+    "Ellipsoids",
     "EmitterDensity",
     "EmitterSet",
     "Emitters",
@@ -130,11 +147,13 @@ __all__ = [
     "Field",
     "FreqGrid",
     "GaussianSheet",
+    "Gaussians",
     "GradientPathError",
     "GradixError",
     "GradixWarning",
     "Grid2D",
     "Irradiance",
+    "Labeling",
     "Material",
     "Microscope",
     "Node",
@@ -154,6 +173,7 @@ __all__ = [
     "Sample",
     "SamplingPlan",
     "Slot",
+    "Solid",
     "Spectrum",
     "Spheres",
     "Static",

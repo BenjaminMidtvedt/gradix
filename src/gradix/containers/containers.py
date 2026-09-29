@@ -10,6 +10,7 @@ from torch import Tensor
 
 from gradix._core.contract import Element
 from gradix._core.errors import StructureError
+from gradix._core.names import PATH_NAMES, check_name
 from gradix.detect.camera import Camera, check_pixel_map
 from gradix.objects.environment import Medium
 from gradix.objects.objectset import ObjectSet
@@ -55,6 +56,7 @@ class Sample(Node):
     def __post_init__(self) -> None:
         super().__post_init__()
         for name, pop in self.populations.items():
+            check_name(name, what="population", reserved=PATH_NAMES)
             if not isinstance(pop, (ObjectSet, Voxels)):
                 raise StructureError(
                     f"population {name!r} is a {type(pop).__name__}, not an object set or volume"

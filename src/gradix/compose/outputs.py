@@ -15,6 +15,7 @@ from typing import Any, Union
 from torch import Tensor
 
 from gradix._core.errors import StructureError
+from gradix._core.names import check_name
 from gradix.schema.base import Node
 
 __all__ = ["RESERVED", "Expected", "Image", "Output", "OutputSpec", "normalize_outputs"]
@@ -56,6 +57,9 @@ OutputSpec = Union[Image, Expected, Node]  # noqa: UP007 - a runtime alias used 
 RESERVED: dict[str, OutputSpec] = {"image": Image(), "expected": Expected()}
 """Reserved output names and their specs."""
 
+ATTRIBUTES: frozenset[str] = frozenset({"get", "items", "keys", "meta", "values"})
+""":class:`Output`'s own attributes, which output names may not shadow (ADR-42)."""
+
 
 def normalize_outputs(outputs: object) -> dict[str, OutputSpec]:
     """Normalise an ``outputs=`` argument into a mapping from names to specs.
@@ -85,8 +89,7 @@ def normalize_outputs(outputs: object) -> dict[str, OutputSpec]:
         raise StructureError(f"outputs must be names or a mapping, got {type(outputs).__name__}")
     out: dict[str, OutputSpec] = {}
     for name, spec in items:
-        if not isinstance(name, str) or not name:
-            raise StructureError(f"output names must be non-empty strings, got {name!r}")
+        check_name(name, what="output", reserved=ATTRIBUTES)
         if isinstance(spec, str):
             if spec not in RESERVED:
                 msg = f"unknown output {spec!r}; reserved names are {sorted(RESERVED)}"
@@ -109,9 +112,10 @@ class Output(Mapping[str, Tensor]):
     """The result of a render: output tensors by name, plus ``meta``.
 
     Every output is an attribute and a key: ``out.image`` is ``out["image"]``, and an output
-    requested as ``outputs={"pos": gx.labels.Positions("beads")}`` is ``out.pos``. A label's
-    extra tensors keep dotted keys (``out["pos.in_fov"]``), and so do names that are not
-    identifiers or that shadow a mapping method (``keys``, ``values``, ``items``, ``get``).
+    requested as ``outputs={"pos": gx.labels.Positions("beads")}`` is ``out.pos``. Output names
+    are identifiers that do not shadow this class's own attributes (``keys``, ``values``,
+    ``items``, ``get``, ``meta``; checked when outputs are requested), so ``out.<name>`` is
+    always the output. A label's extra tensors keep dotted keys (``out["pos.in_fov"]``).
 
     Parameters
     ----------
