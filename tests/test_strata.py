@@ -125,6 +125,15 @@ def test_plans_route_densities_to_strata():
     chain = plan.chain(sample, scope)
     assert isinstance(chain.imaging, gx.imaging.Strata)
     assert torch.equal(plan(sample, scope)["expected"], plan.pipeline(chain)["expected"])
+    # the fast periodic convolution at draft and standard, the exact one at accurate and reference
+    for fidelity, boundary in [
+        ("standard", "periodic"),
+        ("accurate", "linear"),
+        (gx.Fidelity("standard", dense_boundary="linear"), "linear"),
+    ]:
+        imaging = gx.plan(sample, scope, fidelity, outputs=("expected",)).chain(sample, scope)
+        assert isinstance(imaging.imaging, gx.imaging.Strata)
+        assert imaging.imaging.boundary == boundary, fidelity
     mixed = gx.Sample({"cells": cells, "beads": points}, environment=medium)
     with pytest.raises(gx.PlanError, match="different elements"):
         gx.plan(mixed, scope, "standard")

@@ -28,6 +28,7 @@ PRESETS: dict[str, dict[str, object]] = {
         "volumes": "projection",
         "coupling": "C0",
         "wavelength_bins": 1,
+        "dense_boundary": "periodic",
         "oversample": 1,
         "interaction_band": "optical",
         "raster_sigma": 0.5,
@@ -44,6 +45,7 @@ PRESETS: dict[str, dict[str, object]] = {
         "volumes": "projection",
         "coupling": "C0",
         "wavelength_bins": 1,
+        "dense_boundary": "periodic",
         "oversample": "auto",
         "interaction_band": "optical",
         "raster_sigma": 0.3,
@@ -60,6 +62,7 @@ PRESETS: dict[str, dict[str, object]] = {
         "volumes": "multislice",
         "coupling": "C0",
         "wavelength_bins": "auto",
+        "dense_boundary": "linear",
         "oversample": "auto",
         "interaction_band": "full",
         "raster_sigma": 0.3,
@@ -76,6 +79,7 @@ PRESETS: dict[str, dict[str, object]] = {
         "volumes": "multislice",
         "coupling": "C0",
         "wavelength_bins": "auto",
+        "dense_boundary": "linear",
         "oversample": "auto",
         "interaction_band": "full",
         "raster_sigma": 0.3,
@@ -120,6 +124,10 @@ class Fidelity:
         Source-node strategy for Köhler and LED densities.
     wavelength_bins : int or str, optional
         Wavelength bins, or ``"auto"``.
+    dense_boundary : str, optional
+        How dense emission treats the frame's edges: ``"linear"`` convolves exactly,
+        ``"periodic"`` circularly over the frame and its margin (faster; light near one edge
+        wraps to the opposite one).
     oversample : int or str, optional
         Detection oversampling, or ``"auto"``.
     interaction_band : str or float, optional
@@ -166,6 +174,7 @@ class Fidelity:
     coupling: str | None = None
     source: object = None
     wavelength_bins: int | str | None = None
+    dense_boundary: str | None = None
     oversample: int | str | None = None
     interaction_band: str | float | None = None
     raster_sigma: float | None = None

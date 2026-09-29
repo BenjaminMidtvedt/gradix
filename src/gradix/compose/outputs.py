@@ -108,17 +108,73 @@ def normalize_outputs(outputs: object) -> dict[str, OutputSpec]:
 class Output(Mapping[str, Tensor]):
     """The result of a render: output tensors by name, plus ``meta``.
 
+    Every output is an attribute and a key: ``out.image`` is ``out["image"]``, and an output
+    requested as ``outputs={"pos": gx.labels.Positions("beads")}`` is ``out.pos``. A label's
+    extra tensors keep dotted keys (``out["pos.in_fov"]``), and so do names that are not
+    identifiers or that shadow a mapping method (``keys``, ``values``, ``items``, ``get``).
+
     Parameters
     ----------
     values : Mapping[str, Tensor]
         Output tensors by name.
     meta : Mapping[str, object]
         Pipeline hash, chunk sizes, key kind, per-image in-envelope flags and diagnostics.
+
+    Attributes
+    ----------
+    image : Tensor
+        Noisy frames in the camera unit, ``[B, (T,) C, H, W]``, when ``"image"`` is requested.
+    expected : Tensor
+        Noise-free frames in the camera unit, same layout, when ``"expected"`` is requested.
+    meta : dict
+        Pipeline hash, chunk sizes, key kind, in-envelope flags and diagnostics.
+
+    Examples
+    --------
+    >>> import torch
+    >>> out = Output({"image": torch.zeros(1, 1, 4, 4)}, {"key": "none"})
+    >>> out.image is out["image"]
+    True
     """
+
+    image: Tensor
+    expected: Tensor
+    meta: dict[str, Any]
 
     def __init__(self, values: Mapping[str, Tensor], meta: Mapping[str, object]) -> None:
         self._values = dict(values)
-        self.meta: dict[str, Any] = dict(meta)
+        self.meta = dict(meta)
+
+    def __getattr__(self, name: str) -> Tensor:
+        """Return the output called ``name`` (attribute access to the outputs).
+
+        Parameters
+        ----------
+        name : str
+            Output name.
+
+        Returns
+        -------
+        Tensor
+            The output.
+
+        Raises
+        ------
+        AttributeError
+            If the render produced no output of that name.
+        """
+        values = self.__dict__.get("_values")
+        if values is None or name.startswith("__"):  # copies and pickling look up dunders first
+            raise AttributeError(name)
+        try:
+            return values[name]
+        except KeyError:
+            msg = f"no output {name!r}; this render produced {sorted(values)}"
+            raise AttributeError(msg) from None
+
+    def __dir__(self) -> list[str]:
+        names = (k for k in self._values if k.isidentifier())
+        return sorted({*super().__dir__(), *names})
 
     def __getitem__(self, name: str) -> Tensor:
         try:

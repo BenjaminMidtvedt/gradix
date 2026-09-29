@@ -384,9 +384,10 @@ def test_validity_errors_use_the_inputs_values_not_the_widened_envelope():
             environment=medium,
         )
 
-    with pytest.warns(gx.GradixWarning) as record:  # also: the widened NA reaches n
-        gx.Pipeline(chain(1.25, gx.env.Homogeneous(1.33)), outputs=("expected",))
-    assert any("vectorial" in str(w.message) for w in record)
+    with pytest.warns(gx.GradixWarning):  # the widened NA reaches n: a warning, not an error
+        pipe = gx.Pipeline(chain(1.25, gx.env.Homogeneous(1.33)), outputs=("expected",))
+    # psf="auto" falling back to scalar is an info finding
+    assert any(v.severity == "info" and "vectorial" in v.message for v in pipe.violations)
     with pytest.raises(gx.ValidityError, match="supercritical"):
         gx.Pipeline(chain(1.45, gx.env.Homogeneous(1.33)), outputs=("expected",))
     layered = gx.env.LayeredMedium(sample=1.33)

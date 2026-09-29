@@ -296,9 +296,9 @@ class PointPSF(Element[Irradiance]):
         seen = ratio_per_image(self.objective, medium)  # the inputs' actual NA/n, per image
         ratio = seen if seen is not None else optics["na_seen"] / optics["n_seen"]
         if self.psf == "auto" and ratio > self.vectorial_above:
-            found.append(
+            found.append(  # an info line, not a warning, until a vectorial model is registered
                 Violation(
-                    "warn",
+                    "info",
                     "psf='auto' wants the vectorial model here but falls back to scalar: the "
                     f"scalar peak is 2.3–35 % high at NA/n > {self.vectorial_above} (§5.3)",
                     entry=f"{desc.part('objective')}.NA",

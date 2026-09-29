@@ -97,6 +97,7 @@ ELEMENT_KNOBS: tuple[str, ...] = ("source", "dz", "pad", "roi")
 
 KNOB_FIELDS: dict[str, tuple[str, dict[str, str]]] = {
     "emitter_path": ("method", {"sparse": "roi", "global": "global"}),
+    "dense_boundary": ("boundary", {"linear": "linear", "periodic": "periodic"}),
 }
 """Fidelity knobs written into an element field of another name: knob → (field, value map).
 Values outside the map (``"auto"``) leave the element's default."""

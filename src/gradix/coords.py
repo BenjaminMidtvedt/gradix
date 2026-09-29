@@ -24,11 +24,22 @@ from gradix.detect.camera import Camera
 from gradix.optics.objective import Objective
 from gradix.schema.layout import canonical
 
-__all__ = ["depth", "from_focus", "from_pixels", "pitch", "shift_focus", "to_pixels"]
+__all__ = [
+    "depth",
+    "field_of_view",
+    "from_focus",
+    "from_pixels",
+    "pitch",
+    "shift_focus",
+    "to_pixels",
+]
 
 
-def pitch(camera: Camera, objective: Objective, *, like: Tensor) -> Tensor:
-    """Return the object-space pixel pitch, broadcastable against coordinates ``like``.
+def pitch(camera: Camera, objective: Objective, *, like: Tensor | None = None) -> Tensor:
+    """Return the object-space pixel pitch: a pixel's size in the sample, µm.
+
+    It works as a unit for positions given in pixels: ``20 * pitch(camera, objective)`` is
+    twenty pixels in µm.
 
     Parameters
     ----------
@@ -36,33 +47,34 @@ def pitch(camera: Camera, objective: Objective, *, like: Tensor) -> Tensor:
         The camera (``pixel_size`` in µm).
     objective : Objective
         The objective (``magnification``).
-    like : Tensor
-        Coordinates ``[B, N, D]`` (or ``[B, T, N, D]``) when the optics are per image; any
-        ``[…, D]`` for shared optics.
+    like : Tensor, optional
+        Coordinates to broadcast against (their dtype and device too): ``[B, N, D]`` (or
+        ``[B, T, N, D]``) when the optics are per image, any ``[…, D]`` for shared optics.
 
     Returns
     -------
     Tensor
-        ``pixel_size / magnification`` in µm, shaped ``[B|1, 1, …, 1]``.
+        ``pixel_size / magnification`` in µm: a scalar for shared optics; per image
+        ``[B, 1, …, 1]`` shaped like ``like``, or ``[B]`` without it.
 
     Raises
     ------
     ValueError
         If the optics are per image but the coordinates have no ``[B, N, D]`` layout (a 2-d
         ``[N, D]`` array would pair image i's pitch with object i).
+
+    Examples
+    --------
+    >>> import gradix as gx
+    >>> camera = gx.Camera(pixel_size=6.5, shape=(40, 60))
+    >>> round(float(20 * pitch(camera, gx.Objective(NA=1.2, magnification=65))), 6)  # 20 px
+    2.0
     """
-    size = canonical(
-        camera.pixel_size, camera.schema()["pixel_size"], dtype=like.dtype, device=like.device
-    )
-    mag = canonical(
-        objective.magnification,
-        objective.schema()["magnification"],
-        dtype=like.dtype,
-        device=like.device,
-    )
-    p = size / mag  # [B|1]
+    p = _pitches(camera, objective, like)  # [B|1]
     if p.shape[0] == 1:
         return p.reshape(())
+    if like is None:
+        return p
     if like.ndim < 3 or like.shape[0] not in (1, p.shape[0]):
         msg = (
             f"per-image optics ({p.shape[0]} images) need coordinates [B, N, D], "
@@ -70,6 +82,52 @@ def pitch(camera: Camera, objective: Objective, *, like: Tensor) -> Tensor:
         )
         raise ValueError(msg)
     return p.reshape(-1, *([1] * (like.ndim - 1)))
+
+
+def field_of_view(camera: Camera, objective: Objective, *, like: Tensor | None = None) -> Tensor:
+    """Return the camera frame's extent in the sample, ``(width, height)`` in µm.
+
+    The frame spans ``[0, width) × [0, height)``: pixel ``(0, 0)`` covers ``[0, p)²`` with its
+    centre at ``(p/2, p/2)``, ``p`` the object-space pitch. So ``torch.rand(B, N, 2) *
+    field_of_view(camera, objective)`` places points anywhere in the image.
+
+    Parameters
+    ----------
+    camera : Camera
+        The camera (``shape`` ``(H, W)`` in pixels, ``pixel_size`` in µm).
+    objective : Objective
+        The objective (``magnification``).
+    like : Tensor, optional
+        A tensor whose dtype and device the result takes.
+
+    Returns
+    -------
+    Tensor
+        ``(W·p, H·p)`` in µm: ``[2]`` for shared optics, ``[B, 2]`` per image.
+
+    Examples
+    --------
+    >>> import gradix as gx
+    >>> camera = gx.Camera(pixel_size=6.5, shape=(40, 60))
+    >>> fov = field_of_view(camera, gx.Objective(NA=1.2, magnification=65))
+    >>> [round(v, 6) for v in fov.tolist()]
+    [6.0, 4.0]
+    """
+    p = _pitches(camera, objective, like)  # [B|1]
+    height, width = camera.shape
+    extent = p[:, None] * torch.tensor([width, height], dtype=p.dtype, device=p.device)
+    return extent[0] if extent.shape[0] == 1 else extent
+
+
+def _pitches(camera: Camera, objective: Objective, like: Tensor | None) -> Tensor:
+    """Return each image's object-space pitch ``[B|1]`` in µm, in ``like``'s dtype and device."""
+    dtype = like.dtype if like is not None else torch.get_default_dtype()
+    device = like.device if like is not None else None
+    size = canonical(camera.pixel_size, camera.schema()["pixel_size"], dtype=dtype, device=device)
+    mag = canonical(
+        objective.magnification, objective.schema()["magnification"], dtype=dtype, device=device
+    )
+    return size / mag
 
 
 def to_pixels(x: Tensor, camera: Camera, objective: Objective) -> Tensor:

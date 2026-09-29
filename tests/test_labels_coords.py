@@ -25,6 +25,22 @@ def test_per_image_optics_need_a_batch_axis():
     assert torch.allclose(px, torch.full((2, 1, 2), 0.5))
 
 
+def test_field_of_view_and_pitch_express_pixels_in_micrometres():
+    objective, camera = optics(shape=(20, 30), magnification=65)  # pitch 0.1 µm
+    fov = gx.coords.field_of_view(camera, objective)
+    assert torch.allclose(fov, torch.tensor([3.0, 2.0]))  # (width, height)
+    anywhere = torch.rand(4, 50, 2) * fov  # "anywhere in the image"
+    px = gx.coords.to_pixels(anywhere, camera, objective)
+    assert bool((px >= -0.5).all()) and bool((px < torch.tensor([29.5, 19.5])).all())
+    px_unit = gx.coords.pitch(camera, objective)  # a pixel, as a length unit
+    assert math.isclose(float(20 * px_unit), 2.0, rel_tol=1e-6)
+    per_image = gx.Objective(NA=0.5, magnification=torch.tensor([65.0, 130.0]))
+    assert gx.coords.field_of_view(camera, per_image).shape == (2, 2)
+    assert gx.coords.pitch(camera, per_image).shape == (2,)
+    wide = gx.coords.field_of_view(camera, objective, like=torch.zeros((), dtype=torch.float64))
+    assert wide.dtype == torch.float64 and wide.tolist() == [3.0, 2.0]
+
+
 def test_positions_label():
     objective, camera = optics(shape=(20, 30), magnification=50)
     beads = emitters(3, 4, fov=5.0)
@@ -46,6 +62,13 @@ def test_positions_as_a_pipeline_output():
     )
     out = gx.Pipeline(chain, outputs={"mu": "expected", "pos": gx.labels.Positions("beads")})(chain)
     assert out["pos"].shape == (2, 3, 2) and out["pos.in_fov"].dtype == torch.bool
+    # outputs are attributes too, by the names they were requested under
+    assert out.pos is out["pos"] and out.mu is out["mu"]
+    assert "pos" in dir(out) and "pos.in_fov" not in dir(out)
+    with pytest.raises(AttributeError, match=r"no output 'heat'.*\['mu', 'pos', 'pos.in_fov'\]"):
+        _ = out.heat
+    eager = chain(outputs=("expected",))
+    assert eager.expected is eager["expected"]
 
 
 def test_heatmap_and_emitter_table_labels():

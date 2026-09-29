@@ -1,5 +1,6 @@
 # The quality gates of AGENTS.md on a CPU matrix (docs/architecture.md §11.15).
-# The GPU nightly (throughput targets, full-size level equivalence) runs on the self-hosted 3090.
+# CI uses GitHub-hosted runners only, which have no GPU: throughput targets, full-size level
+# equivalence and CUDA parity run locally before each release (benchmarks/, docs/architecture.md §11.15).
 name: ci
 
 on:

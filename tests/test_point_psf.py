@@ -203,8 +203,14 @@ def test_supercritical_psf_renders_with_a_layered_medium():
     es = gx.lower.emitter_set(beads)
     with pytest.raises(gx.ValidityError, match="layered"):
         gx.imaging.PointPSF(objective, camera, psf="scalar")(es, gx.env.Homogeneous(1.333))
-    with pytest.warns(gx.GradixWarning, match="falls back to scalar"):
-        gx.imaging.PointPSF(objective, camera)(es, gx.env.WaterOnCoverslip(sample=1.33))
+    # psf="auto" falls back to scalar until a vectorial model exists: an info line, not a warning
+    medium = gx.env.WaterOnCoverslip(sample=1.33)
+    gx.imaging.PointPSF(objective, camera)(es, medium)
+    chain = gx.Chain(
+        emitters={"b": beads}, imaging=gx.imaging.PointPSF(objective, camera), environment=medium
+    )
+    found = gx.Pipeline(chain, outputs=("expected",)).violations
+    assert any(v.severity == "info" and "falls back to scalar" in v.message for v in found)
     psf = gx.imaging.PointPSF(objective, camera, psf="scalar")  # NA/n_i = 0.955: accept scalar
     image = psf(es, gx.env.WaterOnCoverslip(sample=1.33)).data
     assert float(image.sum()) == pytest.approx(709.0, rel=3e-3)

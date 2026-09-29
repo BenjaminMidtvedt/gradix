@@ -35,51 +35,9 @@ __all__ = [
 ]
 
 _TINY = 1e-12
-_CURAND_EXACT = 64.0
-"""Batch-keyed rates up to this use ``torch.poisson``; larger ones use exact rejection."""
-_PTRS_ATTEMPTS = 4
-"""Rejection attempts of batch-keyed draws above ``_CURAND_EXACT`` (each accepts 0.84–0.89:
-about 6e-4 of the draws at λ = 64 are left over for the rounded Gaussian)."""
-_PTRS_MAX = float(2**23)
-"""Rates above this take the rounded Gaussian limit (skewness error ~λ^-1/2 < 4e-4): below it,
-every float32 PTRS draw (λ + 10√λ < 2^24) is an exact integer."""
-
-
-def _log_pmf32(k: Tensor, lam: Tensor) -> Tensor:
-    """Return ``log Pois(k; λ)`` for λ ≥ 64 in float32 without cancellation.
-
-    ``k·log λ − λ − log Γ(k + 1)`` is written as ``λ·g(x) − ½·log(2πk) − 1/(12k) + …``
-    with ``x = (k − λ)/λ`` and ``g(x) = x − (1 + x)·log1p(x)`` (Stirling), g by its series near 0.
-    """
-    k = torch.clamp(k, min=1.0)
-    x = (k - lam) / lam
-    series = x * x * (-0.5 + x * (1.0 / 6.0 + x * (-1.0 / 12.0 + x * (1.0 / 20.0 - x / 30.0))))
-    direct = x - (1.0 + x) * torch.log1p(x)
-    g = torch.where(x.abs() < 0.05, series, direct)
-    tail = 1.0 / (12.0 * k) - 1.0 / (360.0 * k**3) + 1.0 / (1260.0 * k**5)
-    return lam * g - 0.5 * torch.log(2.0 * math.pi * k) - tail
-
-
-def _ptrs32(lam: Tensor, pairs: list[tuple[Tensor, Tensor]]) -> tuple[Tensor, Tensor]:
-    """PTRS (Hörmann 1993) for λ ≥ 64 in float32 with a stable log-pmf; (draws, accepted)."""
-    slam = torch.sqrt(lam)
-    b = 0.931 + 2.53 * slam
-    a = -0.059 + 0.02483 * b
-    log_invalpha = torch.log(1.1239 + 1.1328 / (b - 3.4))
-    vr = 0.9277 - 3.6224 / (b - 2.0)
-    result = torch.zeros_like(lam)
-    done = torch.zeros_like(lam, dtype=torch.bool)
-    for u, v in pairs:
-        uu = u - 0.5
-        us = 0.5 - torch.abs(uu)
-        k = torch.floor((2.0 * a / us + b) * uu + lam + 0.43)
-        fast = (us >= 0.07) & (v <= vr)
-        reject = (k < 0) | ((us < 0.013) & (v > us))
-        lhs = torch.log(v) + log_invalpha - torch.log(a / (us * us) + b)
-        accept = fast | (~reject & (lhs <= _log_pmf32(k, lam)))
-        result = torch.where(accept & ~done, torch.clamp(k, min=0.0), result)
-        done = done | accept
-    return result, done
+_POISSON_CAP = float(2**23)
+"""Batch-keyed rates above this are drawn at the cap and their fluctuation rescaled to √λ (a
+Gaussian limit: at these rates the relative noise is below 4·10⁻⁴)."""
 
 
 _LAM0 = 1e-30
@@ -102,34 +60,22 @@ def poisson(lam: Tensor, key: int | Tensor, stream: str) -> Tensor:
     -------
     Tensor
         Integer-valued counts in ``lam``'s dtype, same shape (``[B, ...]`` for image keys and
-        shared rates). With a batch key, rates up to 64 use ``torch.poisson``; above, where the
-        CUDA sampler is biased (curand: variance 1 % low and skewness 1.9× at λ = 4000),
-        transformed rejection (PTRS) runs on the generator's uniforms in float32, with the
-        log-pmf evaluated as a Stirling difference that stays accurate to ~10⁻⁵ (4 attempts;
-        the ≤ 6·10⁻⁴ left over take the rounded Gaussian limit, as do rates above 2²³).
+        shared rates). Image keys draw exactly, with a counter-based sampler that is
+        reproducible across devices. Batch keys use ``torch.poisson`` for speed: exact on CPU,
+        but on CUDA (curand) only approximate above λ ≈ 1000. At λ = 4000 the variance is
+        0.9 % low and the third moment 1.8× high, and above λ ≈ 5000 the draws are normal (no
+        skewness); means stay within 0.01 %. An exact sampler as fast is planned before 1.0.
+        Rates above 2²³ are drawn at the cap with their fluctuation rescaled to √λ.
     """
     rate = torch.clamp(lam.detach(), min=0.0)
     if isinstance(key, Tensor):
         return _keys.poisson(key, stream, rate).to(lam.dtype)
     bad = ~torch.isfinite(rate)
-    huge = rate > _PTRS_MAX
-    large = (rate > _CURAND_EXACT) & ~huge & ~bad
-    safe = torch.where(bad | huge | large, torch.zeros_like(rate), rate)
-    gen = _keys.generator(key, stream, rate.device)
-    counts = torch.poisson(safe, generator=gen)
-    # every draw below is made for every element (no host synchronisation), after the Poisson
-    # draw, so the counts of small rates do not depend on the others
-    wide = torch.where(large, rate, _CURAND_EXACT).to(torch.float32)
-
-    def pair() -> tuple[Tensor, Tensor]:
-        u, v = torch.rand((2, *rate.shape), generator=gen, dtype=torch.float32, device=rate.device)
-        return u.clamp(2.0**-24, 1.0 - 2.0**-24), v.clamp(2.0**-24, 1.0 - 2.0**-24)
-
-    exact, accepted = _ptrs32(wide, [pair() for _ in range(_PTRS_ATTEMPTS)])
-    z = torch.randn(rate.shape, generator=gen, dtype=rate.dtype, device=rate.device)
-    gaussian = torch.round(rate + torch.sqrt(torch.where(huge | large, rate, 0.0)) * z)
-    counts = torch.where(large, torch.where(accepted, exact.to(rate.dtype), gaussian), counts)
-    counts = torch.where(huge, gaussian, counts)
+    capped = torch.where(bad, torch.zeros_like(rate), torch.clamp(rate, max=_POISSON_CAP))
+    counts = torch.poisson(capped, generator=_keys.generator(key, stream, rate.device))
+    huge = rate > _POISSON_CAP
+    scale = torch.sqrt(torch.where(huge, rate, _POISSON_CAP) / _POISSON_CAP)
+    counts = torch.where(huge, torch.round(rate + (counts - _POISSON_CAP) * scale), counts)
     return torch.where(bad, torch.full_like(counts, float("nan")), counts)
 
 

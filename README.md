@@ -37,7 +37,7 @@ image = camera.sample(mu, key=torch.arange(1))  # image-keyed noise
 # L3: a Chain in a Pipeline (static grids, value binding, explain())
 chain = gx.Chain(emitters={"beads": beads}, imaging=sprites, environment=env)
 pipe = gx.Pipeline(chain, outputs=("image", "expected"))
-out = pipe(chain, key=torch.arange(1))  # bit-identical to the L2 calls
+out = pipe(chain, key=torch.arange(1))  # out.image, out.expected: as the L2 calls
 
 # L4: a plan chooses the elements from a Fidelity
 sample = gx.Sample({"beads": beads}, environment=env)
@@ -80,7 +80,7 @@ dense = gx.Chain(
     imaging=gx.imaging.Strata(gx.Objective(NA=1.2, magnification=100), camera),
     environment=gx.env.Homogeneous(1.33),
 )
-image = dense(outputs=("expected",))["expected"]  # [1, 1, 80, 80]
+image = dense(outputs=("expected",)).expected  # [1, 1, 80, 80]; outputs are attributes
 ```
 
 ## What it is for
