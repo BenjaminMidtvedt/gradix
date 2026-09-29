@@ -1,4 +1,7 @@
-"""Tutorials and example notebooks run (§12.7): their code cells execute in order."""
+"""Tutorials and example notebooks run (§12.7): their code cells execute in order.
+
+Examples run in smoke mode (``GRADIX_SMOKE=1``): small shapes and few iterations.
+"""
 
 import json
 import warnings
@@ -27,7 +30,8 @@ def headless():
 
 
 @pytest.mark.parametrize("path", NOTEBOOKS, ids=lambda p: p.stem)
-def test_notebook_runs(path, capsys, headless):
+def test_notebook_runs(path, capsys, headless, monkeypatch):
+    monkeypatch.setenv("GRADIX_SMOKE", "1")  # examples shrink to small shapes and few steps
     notebook = json.loads(path.read_text(encoding="utf-8"))
     scope: dict = {}
     for i, cell in enumerate(notebook["cells"]):

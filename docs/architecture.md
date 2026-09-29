@@ -2801,6 +2801,10 @@ Documentation is a deliverable of every milestone, not a phase: **≈ 15 % of ev
 | Ex5 Label-free cells | phase contrast, QPI and intensity diffraction tomography | §9(c), §9(e2) | M4 |
 | Ex6 Polarised light | crossed polarisers and LC-PolScope of birefringent fibres | §9(h) | M4 |
 | Ex7 Particle tracking | sequences with Brownian motion and focus drift | §9(f) | M5 |
+| Ex8 Labelled cells | dense fluorescence of labelled solids under widefield, light-sheet and structured illumination, and in turbid tissue | — | M1 (cap-06) |
+| Ex9 PSF engineering | design a phase mask by Fisher information, then end-to-end with a localisation network | M1 exit (mask learning) | M1 |
+
+Ex8 serves dense fluorescence imaging (cell biology, light-sheet and SIM users) and Ex9 PSF design, groups that Ex1–Ex7 do not reach. Ex1 and Ex7 were drafted at M1 against the API as it landed; their milestones complete them.
 
 - **Kept current.** Notebooks live in `docs/tutorials/` and `docs/examples/`, are committed without outputs (a pre-commit hook strips them) and are executed by the documentation build. Tutorials run on the CPU on every PR. Examples run on every PR in smoke mode (small shapes and few iterations, set by one flag at the top of the notebook) and at full size on a local GPU before each release. ruff lints and formats them. A notebook is drafted when its milestone starts, against the API as it lands, and is updated in the same PR as any API change it touches.
 - **Finding pain points.** The notebooks are the first users of each API. Whoever writes or updates one files each awkward line as an `api-friction` issue: boilerplate, a surprising name, a concept needed too early, an unhelpful error message. Each milestone's API review triages them, and every issue is either fixed before the next freeze or recorded as a deliberate choice. The number of lines each notebook needs for its task is tracked across milestones, as a coarse measure of ergonomics.
@@ -3411,6 +3415,7 @@ class VolumeGrid:  # dense interaction or product grid (may be coarser/finer tha
 - **Smaller decisions:** `psf="auto"` reports its scalar fallback as an info finding, not a warning (§5.3); an emitter's `photons` under excitation is its emission under the `reference` irradiance (§5.1); `gx.from_si` converts every quantity by its power of length, not only lengths (§6.1).
 - **Names (ADR-42):** user names and framework names never share a namespace: shape fields travel as one mapping, fidelity knobs reach only declared element fields, and population, stage and output names pass one rule where they are introduced.
 - **cap-06 (in progress):** `Solid` shapes (`Spheres`, `Ellipsoids`, `Capsules`, `Cylinders`, `Boxes`, `Gaussians`), `gx.Labeling` with `density`, `surface_density` or `photons`, the raster lowering (§4.6) and Strata's density grid (ADR-41); `@gx.geometry`, placed `Voxels` and bead quadrature follow.
+- **Examples (§12.7):** Ex8 (labelled cells) and Ex9 (PSF engineering) join the scope; Ex1, Ex7, Ex8 and Ex9 run at M1, in smoke mode on every PR.
 - **Tracked:** PointPSF core accuracy (the ROI renormalisation and the pupil's soft edge) in https://github.com/BenjaminMidtvedt/gradix/issues/1.
 
 **Revision 9 (2026-09-28): answers to open questions.** The lead developer settled Q3, Q4, Q5, Q10 and Q17, and the method for Q6.

@@ -252,6 +252,28 @@ class Pipeline:
     recorded_chunks : Mapping[str, int], optional
         Chunk sizes to reuse (set by :meth:`from_json`).
 
+    Attributes
+    ----------
+    template : Chain
+        The template Chain.
+    outputs : Mapping[str, OutputSpec]
+        The normalised outputs.
+    inputs : tuple of str
+        The declared input paths.
+    envelope : Envelope
+        The envelope entries, derived and explicit, that fixed the grids.
+    sampling : SamplingPlan
+        The grids and knob values the elements chose, with provenance (:meth:`static` reads
+        one element's).
+    gradient_table : GradientTable
+        The gradient quality of every field for every output (:meth:`gradients` prints it).
+    batch : int
+        The batch capacity.
+    slots : dict of str to int
+        The slot capacity of every population.
+    hash : str
+        A short hash of the build state.
+
     Examples
     --------
     >>> import torch, gradix as gx
